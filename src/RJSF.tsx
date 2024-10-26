@@ -1,12 +1,13 @@
 import { RJSFSchema, UiSchema } from "@rjsf/utils";
 import RjForm from "@rjsf/core";
-import { includes } from "lodash";
+import { includes } from "lodash-es";
 import { getBlockJSONFromSchemas, getBlockJSONFromUISchemas } from "./core/functions/Controls.ts";
-import { BindingWidget } from "./ui/widgets/rjsf/widgets/binding.tsx";
-import { IconPickerField, ImagePickerField, LinkField, RTEField } from "./ui";
+import { BindingWidget } from "./core/rjsf-widgets/binding.tsx";
+import { IconPickerField, ImagePickerField, LinkField, RTEField } from "./core/rjsf-widgets";
 import validator from "@rjsf/validator-ajv8";
 import { useState } from "react";
 import { Checkbox, Link, MultilineText, SelectOption, SingleLineText } from "@chaibuilder/runtime/controls";
+import { t } from "i18next";
 
 const propsSchema: RJSFSchema = { type: "object", properties: {} };
 const uiSchema: UiSchema = {};
@@ -22,7 +23,7 @@ Object.keys(properties).forEach((key) => {
   const control = properties[key];
   if (includes(["slot", "styles"], control.type)) return;
   const propKey = key;
-  propsSchema.properties[propKey] = getBlockJSONFromSchemas(control);
+  propsSchema.properties[propKey] = getBlockJSONFromSchemas(control, t, "");
   uiSchema[propKey] = getBlockJSONFromUISchemas(control);
 });
 

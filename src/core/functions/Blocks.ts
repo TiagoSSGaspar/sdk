@@ -1,15 +1,12 @@
-import FlatToNested from "flat-to-nested";
-import { each, filter, find, flatten, get, isEmpty, isString, map, omit, set } from "lodash";
+import { each, filter, find, flatten, get, isString, map, omit, set } from "lodash-es";
 import { generateUUID } from "./Functions.ts";
 import { ChaiBlock } from "../types/ChaiBlock";
-
-const flatToNestedInstance = new FlatToNested({ children: "blockNodes" });
 
 export const nestedToFlatArray = (nestedJson: Array<ChaiBlock>, parent: string | null = null): Array<ChaiBlock> =>
   flatten(
     nestedJson.map((block: any) => {
       // eslint-disable-next-line no-param-reassign
-      block = parent !== null ? { ...block, parent } : block;
+      block = parent !== null ? { ...block, _parent: parent } : block;
       if (block.children && block.children.length) {
         const children = [...block.children];
         // eslint-disable-next-line no-param-reassign
@@ -20,7 +17,11 @@ export const nestedToFlatArray = (nestedJson: Array<ChaiBlock>, parent: string |
     }),
   );
 
-export function duplicateBlocks(blocks: Array<ChaiBlock>, id: string, _parent: string | null): Array<ChaiBlock> {
+export function duplicateBlocks(
+  blocks: Partial<ChaiBlock>[],
+  id: string,
+  _parent: string | null,
+): Partial<ChaiBlock>[] {
   const children = filter(blocks, (c) => c._parent === id);
   const newBlocks: Array<any> = [];
   for (let i = 0; i < children.length; i++) {
@@ -45,10 +46,30 @@ export function duplicateBlocks(blocks: Array<ChaiBlock>, id: string, _parent: s
   return flatten(newBlocks);
 }
 
-export function getBlocksTree(blocks: ChaiBlock[]) {
-  let elements: any = flatToNestedInstance.convert(blocks.map((block) => omit(block, ["settings"])));
-  elements = !elements.type && elements.blockNodes ? elements.blockNodes : !isEmpty(elements) ? [elements] : [];
-  return elements;
+export function convertToBlocksTree(blocks: Partial<ChaiBlock>[]) {
+  // Create a map to store nodes by their ids
+  const idMap = {};
+  blocks.forEach((item) => {
+    idMap[item._id] = { ...item, children: [] };
+  });
+
+  // Create the result array to store top level nodes
+  const result = [];
+
+  blocks.forEach((item) => {
+    if (item._parent) {
+      // If the item has a parent, find the parent and add the node to its children
+      const parent = idMap[item._parent];
+      if (parent) {
+        parent.children.push(idMap[item._id]);
+      }
+    } else {
+      // If the item has no parent, it is a top level node
+      result.push(idMap[item._id]);
+    }
+  });
+
+  return result;
 }
 
 // eslint-disable-next-line no-underscore-dangle
@@ -74,7 +95,7 @@ export const getSlots = (block: ChaiBlock) => {
  * @param newParentId
  */
 export const getDuplicatedBlocks = (
-  currentBlocks: ChaiBlock[],
+  currentBlocks: Partial<ChaiBlock>[],
   id: string,
   newParentId: string | null = null,
 ): ChaiBlock[] => {

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useCallback } from "react";
 import { EraserIcon } from "@radix-ui/react-icons";
 import {
@@ -12,36 +13,36 @@ import {
   AlertDialogTrigger,
   Button,
 } from "../../../../ui";
-import { useCanvasHistory, useSelectedBlockIds, useSelectedStylingBlocks, useSetAllBlocks } from "../../../hooks";
+import { useSelectedBlockIds, useSelectedStylingBlocks } from "../../../hooks";
+import { useBlocksStoreUndoableActions } from "../../../history/useBlocksStoreUndoableActions.ts";
 
 export const ClearCanvas = () => {
-  const [setAllBlocks] = useSetAllBlocks();
-  const { createSnapshot } = useCanvasHistory();
+  const { t } = useTranslation();
+  const { setNewBlocks } = useBlocksStoreUndoableActions();
   const [, setIds] = useSelectedBlockIds();
   const [, setStyleIds] = useSelectedStylingBlocks();
   const clearCanvas = useCallback(() => {
-    setAllBlocks([]);
+    setNewBlocks([]);
     setIds([]);
     setStyleIds([]);
-    createSnapshot();
-  }, [setAllBlocks, createSnapshot]);
+  }, [setNewBlocks]);
 
   return (
     <div className="flex items-center">
       <AlertDialog>
         <AlertDialogTrigger asChild>
           <Button size="sm" variant="ghost" className="flex items-center gap-x-1">
-            <EraserIcon /> Clear
+            <EraserIcon /> {t("Clear")}
           </Button>
         </AlertDialogTrigger>
-        <AlertDialogContent className="border-border">
+        <AlertDialogContent className={"border-border"}>
           <AlertDialogHeader>
-            <AlertDialogTitle>Clear whole canvas?</AlertDialogTitle>
-            <AlertDialogDescription>Are you sure you want to clear the whole canvas?</AlertDialogDescription>
+            <AlertDialogTitle className="text-foreground">{t("Clear Canvas")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("Are you sure you want to clear the page?")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={clearCanvas}>Yes</AlertDialogAction>
+            <AlertDialogCancel className="text-foreground">{t("Cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={clearCanvas}>{t("Yes")}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

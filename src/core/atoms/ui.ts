@@ -1,16 +1,14 @@
 import { atom } from "jotai";
+import { TreeApi } from "react-arborist";
+import { atomWithStorage } from "jotai/utils";
 
 export const readOnlyModeAtom: any = atom<boolean>(false);
 readOnlyModeAtom.debugLabel = "readOnlyModeAtom";
 
-export const advanceStylingOpenAtom: any = atom(false);
-advanceStylingOpenAtom.debugLabel = "advanceStylingOpenAtom";
-
 export const networkModeAtom: any = atom<string>("online");
 networkModeAtom.debugLabel = "networkModeAtom";
 
-export const codeEditorOpenAtom: any = atom(false);
-codeEditorOpenAtom.debugLabel = "codeEditorOpenAtom";
+export const addBlockModalOpenAtom = atom<string>("");
 
 /**
  * @atom
@@ -28,11 +26,8 @@ primaryLanguageAtom.debugLabel = "primaryLanguageAtom";
 export const canvasIframeAtom: any = atom<HTMLIFrameElement | null>(null);
 canvasIframeAtom.debugLabel = "canvasIframeAtom";
 
-export const activePanelAtom = atom<string>("layers");
+export const activePanelAtom = atom<string>("outline");
 activePanelAtom.debugLabel = "activePanelAtom";
-
-export const addBlockOffCanvasAtom = atom(false);
-addBlockOffCanvasAtom.debugLabel = "addBlockOffCanvasAtom";
 
 export const showPredefinedBlockCategoryAtom = atom("");
 showPredefinedBlockCategoryAtom.debugLabel = "showPredefinedBlockCategoryAtom";
@@ -46,5 +41,23 @@ inlineEditingActiveAtom.debugLabel = "inlineEditingActiveAtom";
 export const draggingFlagAtom = atom(false);
 draggingFlagAtom.debugLabel = "draggingFlagAtom";
 
-export const draggedBlockIdAtom = atom("");
-draggedBlockIdAtom.debugLabel = "draggedBlockIdAtom";
+export const treeRefAtom = atom<TreeApi<any> | null>(null);
+treeRefAtom.debugLabel = "treeRefAtom";
+
+export const canvasSettingsAtom = atom({});
+canvasSettingsAtom.debugLabel = "canvasSettingsAtom";
+
+export const aiAssistantActiveAtom = atom(false);
+aiAssistantActiveAtom.debugLabel = "askAiActiveBlockAtom";
+
+export const codeEditorOpenAtom = atom(false);
+codeEditorOpenAtom.debugLabel = "codeEditorOpenAtom";
+
+export const codeEditorHeightAtom = atomWithStorage("codeEditorHeight", 500);
+codeEditorHeightAtom.debugLabel = "codeEditorHeightAtom";
+
+export const xShowBlocksAtom = atom<string[]>([]);
+xShowBlocksAtom.debugLabel = "xShowBlocksAtom";
+
+export const selectedLibraryAtom = atomWithStorage<string | null>("_selectedLibrary", null);
+selectedLibraryAtom.debugLabel = "selectedLibraryAtom";

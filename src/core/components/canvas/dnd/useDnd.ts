@@ -1,185 +1,214 @@
 import { DragEvent } from "react";
-import { noop, throttle } from "lodash";
+import { has, throttle } from "lodash-es";
 import { useFrame } from "../../../frame";
-import { useAddBlockByDrop } from "../../../hooks/useAddBlockByDrop.ts";
+
 import { useAtom } from "jotai";
 import { draggingFlagAtom } from "../../../atoms/ui.ts";
+
+import { useAddBlock, useHighlightBlockId, useSelectedBlockIds } from "../../../hooks";
+import { useBlocksStoreUndoableActions } from "../../../history/useBlocksStoreUndoableActions.ts";
+import { getOrientation } from "./getOrientation.ts";
+import { draggedBlockAtom, dropTargetBlockIdAtom } from "./atoms.ts";
 import { useFeature } from "flagged";
-import { useHighlightBlockId, useSelectedBlockIds } from "../../../hooks";
 
 let iframeDocument: null | HTMLDocument = null;
-let possiblePositions: number[] = [];
+let possiblePositions: [number, number, number][] = [];
 let dropTarget: HTMLElement | null = null;
 let dropIndex: number | null = null;
 
-function getPadding(target: HTMLElement) {
-  const style = window.getComputedStyle(target);
-  const paddingLeft = parseInt(style.paddingLeft, 10) as number;
-  const paddingTop = parseInt(style.paddingTop, 10) as number;
-  const paddingRight = parseInt(style.paddingRight, 10) as number;
-  const paddingBottom = parseInt(style.paddingBottom, 10) as number;
-  return { paddingLeft, paddingTop, paddingRight, paddingBottom };
-}
-
 const positionPlaceholder = (target: HTMLElement, orientation: "vertical" | "horizontal", mousePosition: number) => {
-  if (!iframeDocument) return;
-  const targetRect = target.getBoundingClientRect();
+  if (!iframeDocument || !target) return;
   const placeholder = iframeDocument?.getElementById("placeholder") as HTMLElement;
 
-  // get padding of the target element
-  const { paddingLeft, paddingTop, paddingRight, paddingBottom } = getPadding(target);
+  const positions = possiblePositions.map(([position]) => {
+    return position;
+  });
 
-  placeholder.style.width = orientation === "vertical" ? targetRect.width - paddingLeft - paddingRight + "px" : "2px";
-  placeholder.style.height = orientation === "vertical" ? "2px" : targetRect.height - paddingTop - paddingBottom + "px";
-  placeholder.style.display = "block";
-
-  const closest = possiblePositions.reduce((prev, curr) =>
-    Math.abs(curr - mousePosition) < Math.abs(prev - mousePosition) ? curr : prev,
+  const closest = positions.reduce(
+    (prev, curr) => (Math.abs(curr - mousePosition) < Math.abs(prev - mousePosition) ? curr : prev),
+    0,
   );
-  dropIndex = possiblePositions.indexOf(closest);
+
+  const closestIndex = positions.indexOf(closest);
+
+  if (!possiblePositions[closestIndex]) return;
+  const values = possiblePositions[closestIndex];
+
+  placeholder.style.width = orientation === "vertical" ? values[2] + "px" : "2px";
+  placeholder.style.height = orientation === "vertical" ? "2px" : values[2] + "px";
+  placeholder.style.display = "block";
   if (orientation === "vertical") {
-    placeholder.style.top = target.offsetTop + closest + "px";
-    placeholder.style.left = target.offsetLeft + paddingLeft + "px";
+    placeholder.style.top = values[0] + "px";
+    placeholder.style.left = values[1] + "px";
   } else {
-    placeholder.style.top = target.offsetTop + paddingTop + "px";
-    placeholder.style.left = target.offsetLeft + closest + "px";
+    placeholder.style.top = values[1] + "px";
+    placeholder.style.left = values[0] + "px";
   }
 };
+
+function calculateDropIndex(mousePosition: number, positions: [number, number, number][]) {
+  let closestIndex = 0;
+  let closestDistance = Infinity;
+  positions.forEach((position, index) => {
+    const distance = Math.abs(position[0] - mousePosition);
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestIndex = index;
+    }
+  });
+
+  return closestIndex;
+}
 
 const calculatePossiblePositions = (target: HTMLElement) => {
   const orientation = getOrientation(target);
-  const style = window.getComputedStyle(target);
   const isHorizontal = orientation === "horizontal";
 
-  // Get padding values
-  const paddingLeft = parseInt(style.paddingLeft);
-  const paddingTop = parseInt(style.paddingTop);
+  possiblePositions = [];
 
-  // Calculate positions based on child elements and their margins
-  let currentPosition = isHorizontal ? paddingLeft : paddingTop;
-  possiblePositions = [currentPosition];
+  Array.from(target.children).forEach((child: HTMLElement, index) => {
+    // Skip elements with class 'pointer-events-none'
+    if (child.classList.contains("pointer-events-none")) return;
 
-  Array.from(target.children).forEach((child: HTMLElement) => {
-    const childStyle = window.getComputedStyle(child);
-    const childMarginBefore = parseInt(
-      isHorizontal ? childStyle.marginLeft + childStyle.marginRight : childStyle.marginTop + childStyle.marginBottom,
-    );
-    const childDimension = isHorizontal ? child.offsetWidth : child.offsetHeight;
-    // First child, consider starting position with its margin
-    possiblePositions.push(currentPosition + childDimension + childMarginBefore);
-    // Move the current position across this child
-    currentPosition += childDimension + childMarginBefore;
+    const position = isHorizontal ? child.offsetLeft : child.offsetTop;
+    const size = isHorizontal ? [child.offsetTop, child.clientHeight] : [child.offsetLeft, child.clientWidth];
+    possiblePositions.push([position, size[0], size[1]]);
+
+    // Handle last child
+    if (index === target.children.length - 1) {
+      const lastPosition = isHorizontal ? child.offsetLeft + child.clientWidth : child.offsetTop + child.clientHeight;
+      possiblePositions.push([lastPosition, size[0], size[1]]);
+    }
   });
 };
-
-function getOrientation(target: HTMLElement) {
-  const display = window.getComputedStyle(target).display;
-  const flexDirection = window.getComputedStyle(target).flexDirection;
-
-  if (display === "flex") {
-    if (flexDirection === "column" || flexDirection === "column-reverse") {
-      return "vertical";
-    } else {
-      return "horizontal";
-    }
-  } else if (display === "grid") {
-    const gridTemplateRows = window.getComputedStyle(target).gridTemplateRows;
-    const gridTemplateColumns = window.getComputedStyle(target).gridTemplateColumns;
-
-    if (gridTemplateRows.includes("auto")) {
-      return "vertical";
-    } else if (gridTemplateColumns.includes("auto")) {
-      return "horizontal";
-    }
-  }
-
-  return display === "block" ? "vertical" : "horizontal";
-}
 
 const throttledDragOver = throttle((e: DragEvent) => {
   const target = e.target as HTMLElement;
   const orientation = getOrientation(target);
-  if (orientation === "vertical") {
-    const y = e.clientY - target.offsetTop;
-    positionPlaceholder(target, orientation, y);
-  } else {
-    const x = e.clientX - target.offsetLeft;
-    positionPlaceholder(target, orientation, x);
-  }
-}, 200);
 
-const dragOver = (e: DragEvent) => {
-  e.preventDefault();
-  e.stopPropagation();
-  throttledDragOver(e);
-};
+  const IframeScrollTop = iframeDocument?.defaultView?.scrollY;
+
+  if (orientation === "vertical") {
+    positionPlaceholder(target, orientation, e.clientY + IframeScrollTop);
+  } else {
+    positionPlaceholder(target, orientation, e.clientX);
+  }
+}, 0);
 
 function removePlaceholder() {
   const placeholder = iframeDocument?.getElementById("placeholder") as HTMLElement;
   placeholder.style.display = "none";
+  removeClassFromElements("pointer-none");
+  removeDataDrop();
+}
+
+function removeClassFromElements(className: string): void {
+  const elements = iframeDocument?.querySelectorAll(`.${className}`);
+  elements.forEach((element) => {
+    element.classList.remove(className);
+  });
+}
+
+function removeDataDrop(): void {
+  const element = iframeDocument?.querySelector('[data-drop="yes"]');
+  if (element) {
+    element.removeAttribute("data-drop");
+  }
 }
 
 export const useDnd = () => {
   const { document } = useFrame();
   const [isDragging, setIsDragging] = useAtom(draggingFlagAtom);
-  const addOnDrop = useAddBlockByDrop();
-  const dndEnabled = useFeature("dnd");
+  const { addCoreBlock } = useAddBlock();
+
   const [, setHighlight] = useHighlightBlockId();
   const [, setBlockIds] = useSelectedBlockIds();
+  const { moveBlocks } = useBlocksStoreUndoableActions();
+  const [draggedBlock, setDraggedBlock] = useAtom(draggedBlockAtom);
+  const [, setDropTarget] = useAtom(dropTargetBlockIdAtom);
+  const dnd = useFeature("dnd");
+
+  if (!dnd) return {};
+
+  const resetDragState = () => {
+    removePlaceholder();
+    setIsDragging(false);
+    //@ts-ignore
+    setDraggedBlock(null);
+    //@ts-ignore
+    setDropTarget(null);
+    possiblePositions = [];
+  };
+
   iframeDocument = document as HTMLDocument;
   return {
     isDragging,
-    "data-dnd": "branch",
-    onDragOver: dndEnabled ? dragOver : noop,
-    onDrop: !dndEnabled
-      ? noop
-      : (ev: DragEvent) => {
-          dropTarget?.classList.remove("outline", "outline-green-300", "outline-2", "-outline-offset-2");
-          const data: string = JSON.parse(ev.dataTransfer.getData("text/plain") as string);
-          // get the block id from the attribute data-block-id from target
-          let blockId = (ev.target as HTMLElement).getAttribute("data-block-id");
-          if (blockId === null) {
-            const parent = (ev.target as HTMLElement).parentElement;
-            blockId = parent.getAttribute("data-block-id");
-          }
+    onDragOver: (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      throttledDragOver(e);
+    },
+    onDrop: (ev: DragEvent) => {
+      const block = dropTarget as HTMLElement;
+      const orientation = getOrientation(block);
+      const mousePosition = orientation === "vertical" ? ev.clientY + iframeDocument?.defaultView?.scrollY : ev.clientX;
+      dropIndex = calculateDropIndex(mousePosition, possiblePositions);
+      const data = draggedBlock;
+      const id = block.getAttribute("data-block-id");
 
-          addOnDrop({ block: data, dropTargetId: blockId || null, relativeIndex: dropIndex });
-          setIsDragging(false);
-          removePlaceholder();
-          setTimeout(() => {
-            removePlaceholder();
-          }, 300);
-        },
-    onDragEnter: !dndEnabled
-      ? noop
-      : (e: DragEvent) => {
-          const event = e;
-          dropTarget = event.target as HTMLElement;
-          event.stopPropagation();
-          event.preventDefault();
-          possiblePositions = [];
-          const target = event.target as HTMLElement;
-          calculatePossiblePositions(target);
-          target.classList.add("outline", "outline-green-300", "outline-2", "-outline-offset-2");
-          setIsDragging(true);
-          setHighlight("");
-          setBlockIds([]);
-        },
-    onDragLeave: !dndEnabled
-      ? noop
-      : (e: DragEvent) => {
-          const event = e;
-          dropTarget = null;
-          event.stopPropagation();
-          event.preventDefault();
-          const target = event.target as HTMLElement;
-          target.classList.remove("outline", "outline-green-300", "outline-2", "-outline-offset-2");
-        },
-    onMouseOut: !dndEnabled
-      ? noop
-      : () => {
-          setIsDragging(false);
-          removePlaceholder();
-        },
+      const isDropTargetAllowed = dropTarget.getAttribute("data-dnd-dragged") === "yes" ? false : true;
+
+      //if the draggedItem is the same as the dropTarget, reset the drag state.
+      if (data?._id === id || !isDropTargetAllowed) {
+        resetDragState();
+        return;
+      }
+      // This is for moving blocks from the sidebar Panel and UiLibraryPanel
+      if (!has(data, "_id")) {
+        addCoreBlock(data, id === "canvas" ? null : id, dropIndex);
+        setTimeout(resetDragState, 300);
+        return;
+      }
+
+      // get the block id from the attribute data-block-id from target
+      let blockId = block.getAttribute("data-block-id");
+
+      if (blockId === null) {
+        const parent = (ev.target as HTMLElement).parentElement;
+        blockId = parent.getAttribute("data-block-id");
+      }
+
+      //@ts-ignore
+      moveBlocks([data._id], blockId === "canvas" ? null : blockId, dropIndex);
+      resetDragState();
+      setTimeout(removePlaceholder, 300);
+    },
+    onDragEnter: (e: DragEvent) => {
+      const event = e;
+      const target = event.target as HTMLElement;
+      dropTarget = target;
+      const dropTargetId = target.getAttribute("data-block-id");
+      const isdropTargetAllowed = target.getAttribute("data-dnd-dragged") === "yes" ? false : true;
+      //@ts-ignore
+      setDropTarget(dropTargetId);
+      event.stopPropagation();
+      event.preventDefault();
+      possiblePositions = [];
+      if (isdropTargetAllowed) {
+        calculatePossiblePositions(target);
+      }
+      setIsDragging(true);
+      setHighlight("");
+      setBlockIds([]);
+    },
+    onDragLeave: (e) => {
+      const dropTargetId = e.target.getAttribute("data-block-id");
+      if ("canvas" !== dropTargetId) return;
+      //@ts-ignore
+      setDropTarget(null);
+      setIsDragging(false);
+      removePlaceholder();
+      possiblePositions = [];
+    },
   };
 };

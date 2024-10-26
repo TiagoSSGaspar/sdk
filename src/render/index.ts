@@ -1,3 +1,3 @@
-export * from "./RenderChaiBlocks";
-export * from "./RenderChaiPage";
-export type { ChaiPageData } from "./functions";
+export { convertToBlocks } from "./functions.ts";
+export { RenderChaiBlocks } from "./RenderChaiBlocks";
+export { getStylesForBlocks } from "./getTailwindCSS.ts";

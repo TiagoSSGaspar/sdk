@@ -1,10 +1,23 @@
 // @ts-ignore
 import { parse, stringify } from "himalaya";
-import { generateUUID } from "../functions/Functions.ts";
-import { capitalize, filter, find, flatMapDeep, flatten, forEach, get, includes, isEmpty, omit, set } from "lodash";
-import { ChaiBlock } from "../types";
-import { cn } from "../lib.ts";
-import { STYLES_KEY } from "../constants/CONTROLS";
+import { cn, generateUUID } from "../functions/Functions.ts";
+import {
+  capitalize,
+  filter,
+  find,
+  flatMapDeep,
+  flatten,
+  forEach,
+  get,
+  has,
+  includes,
+  isEmpty,
+  set,
+  startsWith,
+} from "lodash-es";
+import { ChaiBlock } from "../types/types.ts";
+import { STYLES_KEY } from "../constants/STRINGS.ts";
+import { getVideoURLFromHTML, hasVideoEmbed } from "./import-video.ts";
 
 type Node = {
   type: "element" | "text" | "comment";
@@ -12,6 +25,8 @@ type Node = {
   attributes: Array<Record<string, string>>;
   children: Node[];
 };
+
+const NAME_ATTRIBUTE = "$name";
 
 const ATTRIBUTE_MAP: Record<string, Record<string, string>> = {
   img: { alt: "alt", width: "width", height: "height", src: "image" },
@@ -80,7 +95,7 @@ const getTextContent = (nodes: Node[]): string => {
  * @param value
  * @returns For boolean attributes without content marking true and passing if value is null
  */
-const getSanitizedValue = (value: any) => (value === null ? true : value);
+const getSanitizedValue = (value: any) => (value === null ? "" : value);
 
 /**
  *
@@ -88,11 +103,14 @@ const getSanitizedValue = (value: any) => (value === null ? true : value);
  * @param node
  */
 const getAttrs = (node: Node) => {
+  if (node.tagName === "svg") return {};
+
   const attrs: Record<string, string> = {};
   const replacers = ATTRIBUTE_MAP[node.tagName] || {};
   const attributes: Array<{ key: string; value: string }> = node.attributes as any;
 
   forEach(attributes, ({ key, value }) => {
+    if (key === NAME_ATTRIBUTE) return;
     if (replacers[key]) {
       // for img tag if the src is not absolute then replace with placeholder image
       if (node.tagName === "img" && key === "src" && !value.startsWith("http")) {
@@ -106,7 +124,14 @@ const getAttrs = (node: Node) => {
       }
       set(attrs, replacers[key], getSanitizedValue(value));
     } else if (!includes(["style", "class", "srcset"], key)) {
-      set(attrs, `styles_attrs.${key}`, getSanitizedValue(value));
+      if (!has(attrs, "styles_attrs")) {
+        // @ts-ignore
+        attrs.styles_attrs = {};
+      }
+      if (startsWith(key, "@")) {
+        key = key.replace("@", "x-on:");
+      }
+      attrs.styles_attrs[`${key}`] = getSanitizedValue(value);
     }
   });
 
@@ -140,11 +165,10 @@ const getBlockProps = (node: Node): Record<string, any> => {
       return { _type: "TextArea", showLabel: false };
     case "audio":
       return { _type: "Audio" };
-    case "iframe":
-      return { _type: "Iframe" };
     case "canvas":
       return { _type: "Canvas" };
     case "video":
+    case "iframe":
       return { _type: "CustomHTML" };
     case "svg":
       return { _type: "Icon" };
@@ -207,10 +231,11 @@ const getBlockProps = (node: Node): Record<string, any> => {
       return { _type: "TableFooter" };
 
     default:
+      const type = get(node, "children", []).length > 0 ? "Box" : "EmptyBox";
       return {
-        _type: "Box",
+        _type: type,
         tag: node.tagName,
-        name: node.tagName === "div" ? "Box" : capitalize(node.tagName),
+        _name: type == "EmptyBox" ? type : node.tagName === "div" ? type : capitalize(node.tagName),
       };
   }
 };
@@ -257,6 +282,15 @@ const traverseNodes = (nodes: Node[], parent: any = null): ChaiBlock[] => {
       ...getStyles(node),
     };
 
+    // node has a x-name attribute. set the _name of the block to the value of x-name and
+    // remove the attribute from the node
+    if (node.attributes) {
+      const xName = node.attributes.find((attr) => attr.key === NAME_ATTRIBUTE);
+      if (xName) {
+        block._name = xName.value;
+      }
+    }
+
     if (block._type === "Input") {
       /**
        * hanlding input tag mapping type to input type
@@ -265,11 +299,15 @@ const traverseNodes = (nodes: Node[], parent: any = null): ChaiBlock[] => {
       const inputType = block.inputType || "text";
       if (inputType === "checkbox") set(block, "_type", "Checkbox");
       else if (inputType === "radio") set(block, "_type", "Radio");
-    } else if (node.tagName === "video") {
-      /**
-       * video element to custom html block
-       */
-      block.content = stringify([node]);
+    } else if (node.tagName === "video" || node.tagName === "iframe") {
+      const innerHTML = stringify([node]);
+      if (hasVideoEmbed(innerHTML)) {
+        set(block, "_type", "Video");
+        set(block, "url", getVideoURLFromHTML(innerHTML));
+        set(block, "styles", `${STYLES_KEY},absolute top-0 left-0 w-full h-full`);
+        set(block, "controls", { autoPlay: false, muted: true, loop: false, controls: false });
+      }
+      block.content = innerHTML;
       return [block] as ChaiBlock[];
     } else if (node.tagName === "svg") {
       /**
@@ -279,14 +317,13 @@ const traverseNodes = (nodes: Node[], parent: any = null): ChaiBlock[] => {
 
       const svgHeight = find(node.attributes, { key: "height" });
       const svgWidth = find(node.attributes, { key: "width" });
-      const height = get(svgHeight, "value") ? `[${get(svgHeight, "value")}px]` : "full";
-      const width = get(svgWidth, "value") ? `[${get(svgWidth, "value")}px]` : "full";
-      const svgClass = get(find(node.attributes, { key: "class" }), "value");
+      const height = get(svgHeight, "value") ? `[${get(svgHeight, "value")}px]` : "24px";
+      const width = get(svgWidth, "value") ? `[${get(svgWidth, "value")}px]` : "24px";
+      const svgClass = get(find(node.attributes, { key: "class" }), "value", "w-full h-full");
       block.styles = `${STYLES_KEY}, ${cn(`w-${width} h-${height}`, svgClass)}`.trim();
 
       node.attributes = filter(node.attributes, (attr) => !includes(["style", "width", "height", "class"], attr.key));
       block.icon = stringify([node]);
-      set(block, "styles_attrs", omit(get(block, "styles_attrs") || {}, ["height", "width", "style", "class"]));
       return [block] as ChaiBlock[];
     } else if (node.tagName == "option" && parent && parent.block?._type === "Select") {
       /**

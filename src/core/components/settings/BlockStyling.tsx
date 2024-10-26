@@ -1,85 +1,106 @@
-import { useAtom } from "jotai";
-import { isEmpty } from "lodash";
-import { MixerHorizontalIcon } from "@radix-ui/react-icons";
-import { useTranslation } from "react-i18next";
-import { useSelectedBlocksDisplayChild, useSelectedStylingBlocks, useStylingState } from "../../hooks";
-import { advanceStylingOpenAtom } from "../../atoms/ui";
+import { get, isEmpty, startsWith } from "lodash-es";
+import { useSelectedBlocksDisplayChild, useSelectedStylingBlocks } from "../../hooks";
 import { FLEX_CHILD_SECTION, GRID_CHILD_SECTION, SETTINGS_SECTIONS } from "../../constants/STYLING_GROUPS.ts";
-import { SettingsSection } from "./new-panel/SettingSection";
-import {
-  Accordion,
-  Label,
-  ScrollArea,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../../ui";
-import { CustomAttributes } from "./new-panel/CustomAttribute";
+import { StylingGroup } from "./new-panel/SettingSection";
+import { StylingHelpers } from "./StylingHelpers.tsx";
+import { Accordion } from "../../../ui";
+import { BlockSettingsContext } from "./SettingsContext.tsx";
+import React, { useCallback } from "react";
+import { useThrottledCallback } from "@react-hookz/web";
+
+const MAPPER: { [key: string]: number } = {
+  px: 1,
+  "%": 1,
+  em: 100,
+  rem: 100,
+  ch: 1,
+  vw: 1,
+  vh: 1,
+  "-": 1,
+  deg: 1,
+  ms: 0.1,
+};
 
 export default function BlockStyling() {
-  const [state, setState] = useStylingState();
   const { flexChild, gridChild } = useSelectedBlocksDisplayChild();
-  const [, setShowAdvance] = useAtom(advanceStylingOpenAtom);
-  const { t } = useTranslation();
-
   const [stylingBlocks] = useSelectedStylingBlocks();
+  const [draggedVal, setDraggedVal] = React.useState<any>("");
+  const [dragData, setDragData] = React.useState({
+    onDrag: (value: string) => value,
+    onDragEnd: (value: string) => value,
+    dragStartY: 0,
+    dragging: false,
+    dragStartValue: 0,
+    dragUnit: "",
+    negative: false,
+    cssProperty: "",
+  });
+
+  const updateStyle = useThrottledCallback(
+    (e: any) => {
+      const onlyPositive = !get(dragData, "negative", false);
+      const property = get(dragData, "cssProperty", "");
+      let currentValue = parseFloat(dragData.dragStartValue as any);
+      currentValue = isNaN(currentValue) ? 0 : currentValue;
+
+      let divider = MAPPER[dragData.dragUnit];
+      if (startsWith(property, "scale") || property === "opacity") {
+        divider = 10;
+      }
+
+      const draggedPx = dragData.dragStartY - e.pageY;
+      let value = draggedPx / divider + currentValue;
+      if (onlyPositive && value < 0) {
+        value = 0;
+      }
+
+      if (property === "opacity" && value > 1) {
+        value = 1;
+      }
+
+      dragData.onDrag(`${value}`);
+      setDraggedVal(`${value}`);
+    },
+    [dragData],
+    50,
+  );
+
+  const dragStopped = useCallback(() => {
+    setTimeout(() => dragData.onDragEnd(`${draggedVal}`), 100);
+    setDragData({
+      onDrag: (value) => value,
+      onDragEnd: (value) => value,
+      dragStartY: 0,
+      dragging: false,
+      dragStartValue: 0,
+      dragUnit: "",
+      negative: false,
+      cssProperty: "",
+    });
+  }, [dragData, draggedVal, setDragData]);
   if (isEmpty(stylingBlocks)) {
-    return (
-      <div className="p-4 text-center">
-        <div className="space-y-4 rounded-xl p-4">
-          <MixerHorizontalIcon className="mx-auto text-3xl" />
-          <h1>{t("no_styling_block_selected")}</h1>
-          <p className="text-xs ">
-            Hint: Styling allowed blocks are highlighted with{" "}
-            <span className="border border-orange-500 p-px">orange</span> border
-          </p>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
-    <div onClick={() => setShowAdvance(false)} className="flex h-full flex-col">
-      <div className="flex flex-col space-x-4 space-y-3 border-b border-border px-4 py-2">
-        <div className="flex items-center justify-end gap-x-1.5">
-          <Label htmlFor="" className="flex gap-x-1.5 text-xs italic">
-            State
-          </Label>
-          <Select defaultValue={state as string} onValueChange={(value) => setState(value)}>
-            <SelectTrigger className="h-auto w-fit p-1 px-3">
-              <SelectValue placeholder="State" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">Normal</SelectItem>
-              <SelectItem value="hover">Hover</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="focus">Focus</SelectItem>
-              <SelectItem value="before">Before</SelectItem>
-              <SelectItem value="after">After</SelectItem>
-              <SelectItem value="only">Only</SelectItem>
-              <SelectItem value="first">First</SelectItem>
-              <SelectItem value="last">Last</SelectItem>
-              <SelectItem value="first-letter">First Letter</SelectItem>
-              <SelectItem value="first-line">First Line</SelectItem>
-              <SelectItem value="disabled">Disabled</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      <ScrollArea className="no-scrollbar -mx-1 h-full overflow-x-hidden">
-        <Accordion defaultValue={["Layout"]} type="multiple" className="h-full w-full">
-          {flexChild && <SettingsSection section={FLEX_CHILD_SECTION} />}
-          {gridChild ? <SettingsSection section={GRID_CHILD_SECTION} /> : null}
+    <BlockSettingsContext.Provider value={{ setDragData }}>
+      {dragData.dragging ? (
+        <div
+          onMouseMove={updateStyle}
+          onMouseUp={() => dragStopped()}
+          className="absolute inset-0 z-30 cursor-row-resize bg-gray-300/10"
+        />
+      ) : null}
+      <div className="flex flex-col">
+        <StylingHelpers />
+        <Accordion defaultValue={["Styles"]} type="multiple" className="w-full">
+          {flexChild && <StylingGroup section={FLEX_CHILD_SECTION} />}
+          {gridChild ? <StylingGroup section={GRID_CHILD_SECTION} /> : null}
           {SETTINGS_SECTIONS.map((section) => (
-            <SettingsSection key={section.heading} section={section} />
+            <StylingGroup key={section.heading} section={section} />
           ))}
-          <CustomAttributes section={{ heading: "Attributes" }} />
         </Accordion>
-        <div className="h-60"></div>
-      </ScrollArea>
-    </div>
+      </div>
+    </BlockSettingsContext.Provider>
   );
 }

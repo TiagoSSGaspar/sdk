@@ -1,4 +1,4 @@
-import { get } from "lodash";
+import { get } from "lodash-es";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useCurrentClassByProperty } from "./BlockStyle";
 import { DropDown } from "./DropdownChoices";
@@ -73,7 +73,7 @@ export const ColorChoice = ({ property, onChange }: any) => {
   }, [newColor, onChange, property]);
 
   return (
-    <div className="flex flex-row divide-x divide-solid divide-border rounded-lg border border-border text-xs">
+    <div className="flex flex-row divide-x divide-solid divide-border rounded-lg border border-transparent text-xs">
       <div className="grow text-center">
         <DropDown
           disabled={!canChange}

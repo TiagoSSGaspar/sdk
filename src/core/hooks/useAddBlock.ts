@@ -1,15 +1,13 @@
 import { useCallback } from "react";
-import { filter, find, first, forIn, has, startsWith } from "lodash";
-import { useDispatch } from "./useTreeData";
+import { filter, find, first, forIn, has, startsWith } from "lodash-es";
 import { generateUUID } from "../functions/Functions.ts";
-import { canAddChildBlock } from "../functions/Layers";
+import { canAcceptChildBlock } from "../functions/block-helpers.ts";
 import { useSelectedBlockIds } from "./useSelectedBlockIds";
 import { ChaiBlock } from "../types/ChaiBlock";
 import { CoreBlock } from "../types/CoreBlock";
 import { getBlockDefaultProps } from "../functions/Controls.ts";
-import { SLOT_KEY } from "../constants/CONTROLS";
-import { useAllBlocks } from "./useAllBlocks";
-import { insertBlockAtIndex } from "../functions/InsertBlockAtIndex";
+import { SLOT_KEY } from "../constants/STRINGS.ts";
+import { useBlocksStore, useBlocksStoreUndoableActions } from "../history/useBlocksStoreUndoableActions.ts";
 
 type AddBlocks = {
   addCoreBlock: any;
@@ -17,12 +15,12 @@ type AddBlocks = {
 };
 
 export const useAddBlock = (): AddBlocks => {
-  const dispatch = useDispatch();
-  const allBlocks = useAllBlocks();
+  const [allBlocks] = useBlocksStore();
   const [, setSelected] = useSelectedBlockIds();
+  const { addBlocks } = useBlocksStoreUndoableActions();
 
   const addPredefinedBlock = useCallback(
-    (blocks: ChaiBlock[], parentId?: string, index?: number) => {
+    (blocks: ChaiBlock[], parentId?: string, position?: number) => {
       // eslint-disable-next-line no-param-reassign
       for (let i = 0; i < blocks.length; i++) {
         const { _id } = blocks[i];
@@ -33,30 +31,33 @@ export const useAddBlock = (): AddBlocks => {
           children[j]._parent = blocks[i]._id;
         }
       }
+      const block = first(blocks);
       let parentBlock;
+      let parentBlockId;
       if (parentId) {
         parentBlock = find(allBlocks, { _id: parentId }) as ChaiBlock;
         blocks[0]._parent = parentId;
+        parentBlockId = parentId;
       }
-      const canAdd = parentBlock ? canAddChildBlock(parentBlock._type) : true;
+
+      const canAdd = parentBlock ? canAcceptChildBlock(parentBlock?._type, block._type) : true;
       if (!canAdd && parentBlock) {
         blocks[0]._parent = parentBlock._parent;
+        parentBlockId = parentBlock._parent;
       }
-      dispatch({
-        type: "set_blocks",
-        payload: insertBlockAtIndex(allBlocks, parentId || null, index || null, blocks, canAdd),
-      });
+
+      addBlocks(blocks, parentBlockId, position);
       setSelected([first(blocks)?._id]);
       return first(blocks);
     },
-    [allBlocks, dispatch, setSelected],
+    [allBlocks, setSelected],
   );
 
   const addCoreBlock = useCallback(
-    (coreBlock: CoreBlock, parentId?: string, index?: number) => {
+    (coreBlock: CoreBlock, parentId?: string | null, position?: number) => {
       if (has(coreBlock, "blocks")) {
         const blocks = coreBlock.blocks as ChaiBlock[];
-        return addPredefinedBlock(blocks, parentId, index);
+        return addPredefinedBlock(blocks, parentId, position);
       }
 
       const blockId = generateUUID();
@@ -82,23 +83,25 @@ export const useAddBlock = (): AddBlocks => {
         ...props,
       };
       let parentBlock;
+      let parentBlockId;
       if (parentId) {
         parentBlock = find(allBlocks, { _id: parentId }) as ChaiBlock;
         newBlock._parent = parentId;
+        parentBlockId = parentId;
       }
-      const canAdd = parentBlock ? canAddChildBlock(parentBlock._type) : true;
+
+      const canAdd = canAcceptChildBlock(parentBlock?._type, newBlock._type);
       if (!canAdd && parentBlock) {
         newBlock._parent = parentBlock._parent;
+        parentBlockId = parentBlock._parent;
       }
       const newBlocks: ChaiBlock[] = [newBlock, ...slots];
-      dispatch({
-        type: "set_blocks",
-        payload: insertBlockAtIndex(allBlocks, parentId || null, index || null, newBlocks, canAdd),
-      });
+
+      addBlocks(newBlocks, parentBlockId, position);
       setSelected([newBlock._id]);
       return newBlock;
     },
-    [addPredefinedBlock, allBlocks, dispatch, setSelected],
+    [addPredefinedBlock, allBlocks, setSelected],
   );
 
   return { addCoreBlock, addPredefinedBlock };

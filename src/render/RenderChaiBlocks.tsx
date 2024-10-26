@@ -1,8 +1,21 @@
 import React from "react";
-import { each, filter, get, isEmpty, isString, memoize, omit } from "lodash";
+import {
+  each,
+  filter,
+  get,
+  has,
+  includes,
+  isEmpty,
+  isString,
+  keys,
+  memoize,
+  omit,
+  cloneDeep,
+  forEach,
+} from "lodash-es";
 import { twMerge } from "tailwind-merge";
 import { ChaiBlock } from "../core/types/ChaiBlock.ts";
-import { SLOT_KEY, STYLES_KEY } from "../core/constants/CONTROLS.ts";
+import { SLOT_KEY, STYLES_KEY } from "../core/constants/STRINGS.ts";
 import { getBlockComponent } from "@chaibuilder/runtime";
 import { addPrefixToClasses } from "./functions.ts";
 
@@ -20,12 +33,21 @@ const getSlots = (block: ChaiBlock) => {
 const generateClassNames = memoize((styles: string, classPrefix: string) => {
   const stylesArray = styles.replace(STYLES_KEY, "").split(",");
   const classes = twMerge(stylesArray[0], stylesArray[1]);
+  if (classPrefix === "") return classes.replace(STYLES_KEY, "").trim();
   // split classes by space and add prefix to each class
   return addPrefixToClasses(classes, classPrefix).replace(STYLES_KEY, "").trim();
 });
 
 function getElementAttrs(block: ChaiBlock, key: string) {
-  return get(block, `${key}_attrs`, {}) as Record<string, string>;
+  const attrs = get(block, `${key}_attrs`, {}) as Record<string, string>;
+  if (has(attrs, "data-ai-key")) {
+    delete attrs["data-ai-key"];
+  }
+  const attrsKeys = keys(attrs).join(" ");
+  if (includes(attrsKeys, "x-show") && !includes(attrsKeys, "x-transition")) {
+    attrs["x-transition"] = "";
+  }
+  return attrs;
 }
 
 function getStyleAttrs(block: ChaiBlock, classPrefix: string) {
@@ -52,16 +74,33 @@ function applyBindings(block: ChaiBlock, chaiData: any): ChaiBlock {
   });
   return block;
 }
+
+function applyLanguage(_block: ChaiBlock, lang: string, blockDefinition) {
+  if (isEmpty(lang)) return _block;
+  const block = cloneDeep(_block);
+
+  forEach(keys(block), (key) => {
+    if (get(blockDefinition, ["props", key, "i18n"]) && !isEmpty(lang)) {
+      block[key] = get(block, `${key}-${lang}`, block[key]);
+    }
+  });
+  return block;
+}
+
 export function RenderChaiBlocks({
   blocks,
   parent,
-  classPrefix = "c-",
+  classPrefix = "",
   externalData = {},
+  blockModifierCallback,
+  lang,
 }: {
   blocks: ChaiBlock[];
   parent?: string;
   classPrefix?: string;
-  externalData: Record<string, any>;
+  externalData?: Record<string, any>;
+  blockModifierCallback?: (block: ChaiBlock) => ChaiBlock;
+  lang?: string;
 }) {
   const allBlocks = blocks;
   const getStyles = (block: ChaiBlock) => getStyleAttrs(block, classPrefix);
@@ -83,6 +122,7 @@ export function RenderChaiBlocks({
                     classPrefix={classPrefix}
                     blocks={allBlocks}
                     parent={slotId}
+                    lang={lang}
                   />
                 )),
               );
@@ -96,6 +136,7 @@ export function RenderChaiBlocks({
                 classPrefix={classPrefix}
                 parent={block._id}
                 blocks={allBlocks}
+                lang={lang}
               />
             ) : null;
 
@@ -105,6 +146,9 @@ export function RenderChaiBlocks({
             // @ts-ignore
             const Component: React.FC<any> = (blockDefinition as { component: React.FC<ChaiBlock> }).component;
             syncedBlock = { ...(blockDefinition as any).defaults, ...block };
+            if (blockModifierCallback) {
+              syncedBlock = blockModifierCallback(syncedBlock);
+            }
             return React.createElement(
               Component,
               omit(
@@ -113,7 +157,7 @@ export function RenderChaiBlocks({
                   inBuilder: false,
                   ...syncedBlock,
                   index,
-                  ...applyBindings(block, externalData),
+                  ...applyBindings(applyLanguage(block, lang, blockDefinition), externalData),
                   ...getStyles(syncedBlock),
                   ...attrs,
                 },

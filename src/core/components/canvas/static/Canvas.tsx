@@ -6,10 +6,10 @@ import {
   useSelectedStylingBlocks,
   useUpdateBlocksProps,
 } from "../../../hooks";
-import { first, isEmpty, omit, throttle } from "lodash";
+import { first, isEmpty, omit, throttle } from "lodash-es";
 import { Quill } from "react-quill";
 import { useAtom } from "jotai";
-import { inlineEditingActiveAtom } from "../../../atoms/ui.ts";
+import { inlineEditingActiveAtom, treeRefAtom } from "../../../atoms/ui.ts";
 import { useDnd } from "../dnd/useDnd.ts";
 
 function getTargetedBlock(target) {
@@ -31,7 +31,7 @@ function destroyQuill(quill) {
   quill.container.parentNode.removeChild(quill.container);
 
   // If there's a separate toolbar, hide or remove it
-  var toolbar = document.querySelector(".ql-toolbar");
+  const toolbar = document.querySelector(".ql-toolbar");
   if (toolbar) {
     toolbar.parentNode.removeChild(toolbar);
   }
@@ -43,9 +43,9 @@ function destroyQuill(quill) {
 const useHandleCanvasDblClick = () => {
   const INLINE_EDITABLE_BLOCKS = ["Heading", "Paragraph", "Text", "Link", "Span", "Button"];
   const updateContent = useUpdateBlocksProps();
-  const [, setIds] = useSelectedBlockIds();
   const [, setHighlightedId] = useHighlightBlockId();
   const [editingBlockId, setEditingBlockId] = useAtom(inlineEditingActiveAtom);
+
   return (e) => {
     if (editingBlockId) return;
     const chaiBlock: HTMLElement = getTargetedBlock(e.target);
@@ -75,34 +75,59 @@ const useHandleCanvasDblClick = () => {
       setHighlightedId("");
     }
     newBlock.addEventListener("blur", blurListener, true);
+
+    newBlock.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === "Escape") {
+        blurListener();
+      }
+    });
+
     quill.focus();
     // remove .ql-clipboard element from newBlock
     newBlock.querySelector(".ql-clipboard")?.remove();
-    setIds([]);
     setEditingBlockId(chaiBlock.getAttribute("data-block-id"));
   };
 };
 
 const useHandleCanvasClick = () => {
   const [, setStyleBlockIds] = useSelectedStylingBlocks();
-  const [, setIds] = useSelectedBlockIds();
+  const [ids, setIds] = useSelectedBlockIds();
+  const [, setHighlighted] = useHighlightBlockId();
   const [editingBlockId] = useAtom(inlineEditingActiveAtom);
+  const [treeRef] = useAtom(treeRefAtom);
   return (e: any) => {
     if (editingBlockId) {
       return;
     }
     e.stopPropagation();
     const chaiBlock: HTMLElement = getTargetedBlock(e.target);
+    if (chaiBlock?.getAttribute("data-block-id") && chaiBlock?.getAttribute("data-block-id") === "container") {
+      setIds([]);
+      setStyleBlockIds([]);
+      setHighlighted("");
+      return;
+    }
+
     if (chaiBlock?.getAttribute("data-block-parent")) {
       // check if target element has data-styles-prop attribute
       const styleProp = chaiBlock.getAttribute("data-style-prop") as string;
       const styleId = chaiBlock.getAttribute("data-style-id") as string;
       const blockId = chaiBlock.getAttribute("data-block-parent") as string;
+      if (!ids.includes(blockId)) {
+        treeRef?.closeAll();
+      }
+
       setStyleBlockIds([{ id: styleId, prop: styleProp, blockId }]);
       setIds([blockId]);
     } else if (chaiBlock?.getAttribute("data-block-id")) {
-      setIds([chaiBlock.getAttribute("data-block-id")]);
+      const blockId = chaiBlock.getAttribute("data-block-id");
+      if (!ids.includes(blockId)) {
+        treeRef?.closeAll();
+      }
+      setStyleBlockIds([]);
+      setIds(blockId === "canvas" ? [] : [blockId]);
     }
+    setHighlighted("");
   };
 };
 
@@ -151,12 +176,13 @@ export const Canvas = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <div
+      data-block-id={"canvas"}
       id="canvas"
       onClick={handleCanvasClick}
       onDoubleClick={handleDblClick}
       onMouseMove={handleMouseMove}
       {...omit(dnd, "isDragging")}
-      className={`relative h-screen max-w-full ` + (dnd.isDragging ? "dragging" : "")}>
+      className={`relative h-full max-w-full p-px ` + (dnd.isDragging ? "dragging" : "") + ""}>
       {children}
     </div>
   );

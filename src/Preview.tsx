@@ -1,8 +1,8 @@
-import { RenderChaiBlocks } from "./render";
+import { getStylesForBlocks, RenderChaiBlocks } from "./render";
 import { useAtom } from "jotai";
-import { lsBlocksAtom, lsBrandingOptionsAtom } from "./atoms-dev.ts";
+import { lsBlocksAtom, lsBrandingOptionsAtom } from "./__dev/atoms-dev.ts";
 import { useEffect, useState } from "react";
-import { getStylesForBlocks } from "./render/functions.ts";
+import "./blocks/web";
 
 function Preview() {
   const [blocks] = useAtom(lsBlocksAtom);
@@ -11,7 +11,7 @@ function Preview() {
 
   useEffect(() => {
     (async () => {
-      const styles = await getStylesForBlocks(blocks, brandingOptions);
+      const styles = await getStylesForBlocks(blocks, brandingOptions, true);
       setStyles(styles);
     })();
   }, [blocks, brandingOptions]);
@@ -19,7 +19,7 @@ function Preview() {
   return (
     <>
       <style>{allStyles}</style>
-      <RenderChaiBlocks externalData={{}} blocks={blocks} />
+      <RenderChaiBlocks blocks={blocks} />
     </>
   );
 }

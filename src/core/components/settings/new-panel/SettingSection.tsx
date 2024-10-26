@@ -1,11 +1,13 @@
 import React, { createContext, useCallback, useMemo } from "react";
-import { flatten, has, intersection, map } from "lodash";
+import { flatten, has, intersection, map } from "lodash-es";
 import { MultipleChoices } from "../choices/MultipleChoices";
 import { BlockStyle } from "../choices/BlockStyle";
 import { useSelectedBlockCurrentClasses } from "../../../hooks";
+import { useTranslation } from "react-i18next";
 import { AccordionContent, AccordionItem, AccordionTrigger } from "../../../../ui";
 
 const NestedOptions = ({ heading, items }: any) => {
+  const { t } = useTranslation();
   const currentClasses = useSelectedBlockCurrentClasses();
   const isAnyPropertySet: boolean = useMemo(() => {
     const getItemProperties = (it: any[]) =>
@@ -31,11 +33,12 @@ const NestedOptions = ({ heading, items }: any) => {
     const setProps = map(currentClasses, "property");
     return intersection(properties, setProps).length > 0;
   }, [currentClasses, items]);
+
   return (
     <details>
-      <summary className="my-px cursor-default rounded-md bg-background p-px px-2 text-[11px] text-foreground">
+      <summary className="my-px cursor-default rounded-md bg-gray-50 p-px px-2 text-[11px] text-foreground dark:bg-gray-800">
         <div className="inline">
-          {heading}
+          {t(heading.toLowerCase())}
           {isAnyPropertySet ? (
             <span
               className={`ml-1 mr-2 inline-block h-[8px] w-[8px] rounded-full ${
@@ -59,9 +62,9 @@ const NestedOptions = ({ heading, items }: any) => {
 
 const SectionContext = createContext({});
 
-export const SettingsSection = ({ section }: any) => {
+export const StylingGroup = ({ section }: any) => {
+  const { t } = useTranslation();
   const currentClasses = useSelectedBlockCurrentClasses();
-
   const matchCondition = useCallback(
     (conditions: any = []): boolean => {
       const active: any = {};
@@ -81,46 +84,17 @@ export const SettingsSection = ({ section }: any) => {
     [currentClasses],
   );
 
-  const isAnyPropertySet: boolean = useMemo(() => {
-    if (currentClasses.length > 0 && section.heading === "Classes") {
-      return true;
-    }
-    const getItemProperties = (items: any[]) =>
-      flatten(
-        items.map((item) => {
-          if (item.styleType === "multiple") {
-            return flatten(map(item.options, "key"));
-          }
-          return item.property;
-        }),
-      );
-    const properties: Array<string> = flatten(
-      section.items.map((item: any) => {
-        if (item.styleType === "accordion") {
-          return getItemProperties(item.items);
-        }
-        if (item.styleType === "multiple") {
-          return flatten(map(item.options, "key"));
-        }
-        return item.property;
-      }),
-    );
-    const setProps = map(currentClasses, "property");
-    return intersection(properties, setProps).length > 0;
-  }, [currentClasses, section.heading, section.items]);
-
   const contextValue = useMemo(() => ({}), []);
 
   return (
     <SectionContext.Provider value={contextValue}>
-      <AccordionItem value={section.heading}>
-        <AccordionTrigger className="px-3 py-2 text-xs hover:no-underline">
-          <div className="flex items-center gap-x-2">
-            <div className={`h-[8px] w-[8px] rounded-full ${isAnyPropertySet ? "bg-blue-500" : "bg-gray-300"}`} />
-            {section.heading}
+      <AccordionItem value={section.heading} className="border-none">
+        <AccordionTrigger className="border-b border-border py-2 text-xs">
+          <div className="flex items-center">
+            <div className="flex items-center gap-x-2 text-sm font-bold">{t(section.heading)}</div>
           </div>
         </AccordionTrigger>
-        <AccordionContent className="bg-gray-100 px-3.5 py-2">
+        <AccordionContent className="py-2">
           {React.Children.toArray(
             section.items.map((item: any) => {
               if (has(item, "component")) {

@@ -1,7 +1,6 @@
-import { get, map } from "lodash";
+import { get, map } from "lodash-es";
 import { useEffect, useState } from "react";
 import { useFrame } from "../../../frame";
-import { tailwindcssPaletteGenerator } from "@bobthered/tailwindcss-palette-generator";
 import {
   useBrandingOptions,
   useDarkMode,
@@ -10,16 +9,23 @@ import {
   useSelectedStylingBlocks,
 } from "../../../hooks";
 import { useAtom } from "jotai";
-import { draggedBlockIdAtom } from "../../../atoms/ui.ts";
+import typography from "@tailwindcss/typography";
+import forms from "@tailwindcss/forms";
+import aspectRatio from "@tailwindcss/aspect-ratio";
+import { tailwindcssPaletteGenerator } from "@bobthered/tailwindcss-palette-generator";
+import { draggedBlockAtom, dropTargetBlockIdAtom } from "../dnd/atoms.ts";
+import plugin from "tailwindcss/plugin";
+import { set } from "lodash-es";
 // @ts-ignore
 
-export const HeadTags = ({ model }: { model: string }) => {
-  const [brandingOptions] = useBrandingOptions();
+export const HeadTags = () => {
+  const [customTheme] = useBrandingOptions();
   const [selectedBlockIds] = useSelectedBlockIds();
   const [darkMode] = useDarkMode();
   const [highlightedId] = useHighlightBlockId();
   const [stylingBlockIds] = useSelectedStylingBlocks();
-  const [draggedBlockId] = useAtom(draggedBlockIdAtom);
+  const [draggedBlock] = useAtom(draggedBlockAtom);
+  const [dropTargetId] = useAtom(dropTargetBlockIdAtom);
 
   const { document: iframeDoc, window: iframeWin } = useFrame();
 
@@ -30,65 +36,91 @@ export const HeadTags = ({ model }: { model: string }) => {
   const [selectedStylingBlocks] = useState<HTMLStyleElement>(
     iframeDoc?.getElementById("selected-styling-block") as HTMLStyleElement,
   );
-  const [draggedBlock] = useState<HTMLStyleElement>(iframeDoc?.getElementById("dragged-block") as HTMLStyleElement);
+  const [draggedBlockStyle] = useState<HTMLStyleElement>(
+    iframeDoc?.getElementById("dragged-block") as HTMLStyleElement,
+  );
 
   useEffect(() => {
     if (darkMode) iframeDoc?.documentElement.classList.add("dark");
     else iframeDoc?.documentElement.classList.remove("dark");
   }, [darkMode, iframeDoc]);
 
-  const headingFont: string = get(brandingOptions, "headingFont", "DM Sans");
-  const bodyFont: string = get(brandingOptions, "bodyFont", "DM Sans");
+  const headingFont: string = get(customTheme, "headingFont", "DM Sans");
+  const bodyFont: string = get(customTheme, "bodyFont", "DM Sans");
 
   useEffect(() => {
-    const primary = get(brandingOptions, "primaryColor", "#000");
-    const secondary = get(brandingOptions, "secondaryColor", "#FFF");
-    const colors = tailwindcssPaletteGenerator({
+    const primary = get(customTheme, "primaryColor", "#000");
+    const secondary = get(customTheme, "secondaryColor", "#FFF");
+    const BG_LIGHT_MODE = get(customTheme, "bodyBgLightColor", "#fff");
+    const BG_DARK_MODE = get(customTheme, "bodyBgDarkColor", "#000");
+    const TEXT_DARK_MODE = get(customTheme, "bodyTextDarkColor", "#000");
+    const TEXT_LIGHT_MODE = get(customTheme, "bodyTextLightColor", "#fff");
+
+    const palette = tailwindcssPaletteGenerator({
       colors: [primary, secondary],
       names: ["primary", "secondary"],
     });
-    colors.primary.DEFAULT = primary;
-    colors.secondary.DEFAULT = secondary;
 
-    const borderRadius = get(brandingOptions, "roundedCorners", "0");
+    // add DEFAULT color
+    set(palette, "primary.DEFAULT", primary);
+    set(palette, "secondary.DEFAULT", secondary);
+
+    const colors: Record<string, string> = {
+      "bg-light": BG_LIGHT_MODE,
+      "bg-dark": BG_DARK_MODE,
+      "text-dark": TEXT_DARK_MODE,
+      "text-light": TEXT_LIGHT_MODE,
+    };
+
+    const borderRadius = get(customTheme, "roundedCorners", "0");
     // @ts-ignore
     if (!iframeWin || !iframeWin.tailwind) return;
     // @ts-ignore
     iframeWin.tailwind.config = {
       darkMode: "class",
       theme: {
-        fontFamily: {
-          heading: [headingFont],
-          body: [bodyFont],
-        },
         extend: {
-          borderRadius: {
-            global: `${!borderRadius ? "0" : borderRadius}px`,
+          container: {
+            center: true,
+            padding: "1rem",
+            screens: {
+              "2xl": "1400px",
+            },
           },
-          colors,
+          fontFamily: {
+            heading: [headingFont],
+            body: [bodyFont],
+          },
+          borderRadius: {
+            DEFAULT: `${!borderRadius ? "0" : borderRadius}px`,
+          },
+          colors: { ...colors, ...palette },
         },
       },
 
       plugins: [
-        // @ts-ignore
-        iframeWin.tailwind.plugin.withOptions(({ prefix = "ui" } = {}) => ({ addVariant }: any) => {
-          // eslint-disable-next-line no-restricted-syntax
-          for (const state of ["open", "checked", "selected", "active", "disabled"]) {
-            // But for now, this will do:
-            addVariant(`${prefix}-${state}`, [
-              `&[data-headlessui-state~="${state}"]`,
-              `:where([data-headlessui-state~="${state}"]) &`,
-            ]);
-
-            addVariant(`${prefix}-not-${state}`, [
-              `&[data-headlessui-state]:not([data-headlessui-state~="${state}"])`,
-              `:where([data-headlessui-state]:not([data-headlessui-state~="${state}"])) &:not([data-headlessui-state])`,
-            ]);
-          }
+        typography,
+        forms,
+        aspectRatio,
+        plugin(function ({ addBase, theme }: any) {
+          addBase({
+            "h1,h2,h3,h4,h5,h6": {
+              fontFamily: theme("fontFamily.heading"),
+            },
+            body: {
+              fontFamily: theme("fontFamily.body"),
+              color: theme("colors.text-light"),
+              backgroundColor: theme("colors.bg-light"),
+            },
+            ".dark body": {
+              color: theme("colors.text-dark"),
+              backgroundColor: theme("colors.bg-dark"),
+            },
+          });
         }),
       ],
     };
-  }, [brandingOptions, iframeWin, headingFont, bodyFont]);
+  }, [customTheme, iframeWin, headingFont, bodyFont]);
 
   useEffect(() => {
     if (!selectedBlockStyle) return;
@@ -100,17 +132,15 @@ export const HeadTags = ({ model }: { model: string }) => {
   }, [selectedBlockIds, selectedBlockStyle]);
 
   useEffect(() => {
-    if (!draggedBlockId) {
-      draggedBlock.textContent = "";
-      return;
-    }
-    draggedBlock.textContent = `[data-block-id="${draggedBlockId}"]{ pointer-events: none !important; opacity: 0.2 !important}`;
-  }, [draggedBlockId]);
+    draggedBlockStyle.textContent = draggedBlock
+      ? `[data-block-id="${draggedBlock._id}"], [data-block-id="${draggedBlock._id}"] > * { pointer-events: none !important; opacity: 0.6 !important}`
+      : "";
+  }, [draggedBlock, draggedBlockStyle]);
 
   useEffect(() => {
     if (!highlightedBlockStyle) return;
     highlightedBlockStyle.textContent = highlightedId
-      ? `[data-style-id="${highlightedId}"]{ outline: 1px solid #42a1fc !important; outline-offset: -1px;}`
+      ? `[data-style-id="${highlightedId}"], [data-block-id="${highlightedId}"]{ outline: 1px solid #42a1fc !important; outline-offset: -1px;}`
       : "";
   }, [highlightedId, selectedBlockIds, highlightedBlockStyle]);
 
@@ -121,45 +151,28 @@ export const HeadTags = ({ model }: { model: string }) => {
             }`;
   }, [stylingBlockIds, selectedStylingBlocks]);
 
-  // set body background color
   useEffect(() => {
-    const textLight = get(brandingOptions, "bodyTextLightColor", "#64748b");
-    const textDark = get(brandingOptions, "bodyTextDarkColor", "#94a3b8");
-    const bgLight = get(brandingOptions, "bodyBgLightColor", "#FFFFFF");
-    const bgDark = get(brandingOptions, "bodyBgDarkColor", "#0f172a");
-    // @ts-ignore
-    iframeDoc.body.className = `font-body antialiased text-[${textLight}] bg-[${bgLight}] dark:text-[${textDark}] dark:bg-[${bgDark}]`;
-  }, [brandingOptions, iframeDoc, model]);
+    iframeDoc.querySelector(`#drop-target-block`).innerHTML = dropTargetId
+      ? `[data-block-id="${dropTargetId}"]{ outline: 1px dashed orange !important; outline-offset: -1px;}`
+      : "";
+  }, [dropTargetId]);
 
-  return model === "page" ? (
+  return (
     <>
-      {headingFont && (
+      {(headingFont || bodyFont) && (
         <link
-          id="heading-font"
           rel="stylesheet"
-          type="text/css"
-          href={`https://fonts.googleapis.com/css2?family=${headingFont.replace(
-            / /g,
-            "+",
-          )}:wght@300;400;500;600;700;800;900&display=swap`}
-          media="all"
+          href={`https://fonts.googleapis.com/css2?family=${
+            headingFont
+              ? `${headingFont.replace(/ /g, "+")}:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,300;1,400;1,500;1,600;1,700;1,800;1,900`
+              : ""
+          }${headingFont && bodyFont && headingFont !== bodyFont ? "&" : ""}${
+            bodyFont && bodyFont !== headingFont
+              ? `family=${bodyFont.replace(/ /g, "+")}:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,300;1,400;1,500;1,600;1,700;1,800;1,900`
+              : ""
+          }&display=swap`}
         />
-      )}
-      {bodyFont && headingFont !== bodyFont && (
-        <link
-          id="body-font"
-          rel="stylesheet"
-          type="text/css"
-          href={`https://fonts.googleapis.com/css2?family=${bodyFont.replace(
-            / /g,
-            "+",
-          )}:wght@300;400;500;600;700;800;900&display=swap`}
-          media="all"
-        />
-      )}
-      {headingFont && (
-        <style>{`h1,h2,h3,h4,h5,h6{font-family: "${headingFont}",ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";}`}</style>
       )}
     </>
-  ) : null;
+  );
 };

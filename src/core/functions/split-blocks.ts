@@ -1,7 +1,7 @@
 // @ts-nocheck
-import FlatToNested from "flat-to-nested";
-import { each, filter, find, first, flatten, get, isEmpty, map, set } from "lodash";
+import { each, filter, find, first, flatten, get, map, set } from "lodash-es";
 import { ChaiBlock } from "../types/ChaiBlock.ts";
+import { convertToBlocksTree } from "./Blocks.ts";
 
 /**
  * IMPORTANT: This is a very fragile code. Not automation tested but works perfectly
@@ -9,24 +9,15 @@ import { ChaiBlock } from "../types/ChaiBlock.ts";
  * FIXME: Add tests
  * @type {FlatToNested}
  */
-const flatToNestedInstance = new FlatToNested({});
-
-export function getBlocksTree(blocks: ChaiBlock[]) {
-  let elements = flatToNestedInstance.convert(blocks);
-  elements =
-    !elements.type && elements.children && elements.children.length
-      ? elements.children
-      : !isEmpty(elements)
-      ? [elements]
-      : [];
-  return elements;
+export function getBlocksTree(blocks: Partial<ChaiBlock>[]) {
+  return convertToBlocksTree(blocks);
 }
 
 const nestedToFlatArray = (nestedJson: any, parent: any) =>
   flatten(
     nestedJson.map((block: ChaiBlock) => {
       // eslint-disable-next-line no-param-reassign
-      block = parent ? { ...block, parent } : { ...block };
+      block = parent ? { ...block, _parent: parent } : { ...block };
       if (block.children) {
         const children = [...block.children];
         // eslint-disable-next-line no-param-reassign
@@ -45,7 +36,7 @@ function setProjectBlocksInMemory(nodes: any, initial = false) {
       nodes[i] = {
         type: "GlobalBlock",
         blockId: element.blockId,
-        _parent: get(element, "parent", null),
+        _parent: get(element, "_parent", null),
         _id: element._id,
       };
     } else if (element.children && element.children.length) {
@@ -68,14 +59,13 @@ function getInnerBlocks(flatArr: ChaiBlock[]) {
 
 function getSingleBlock(flatArray: ChaiBlock[]) {
   let blocks: ChaiBlock[] = [];
-  const parent = get(first(flatArray), "parent", null);
-  set(first(flatArray), "parent", null);
+  const parent = get(first(flatArray), "_parent", null);
+  set(first(flatArray), "_parent", null);
   const block = [flatToNestedInstance.convert(clone(flatArray))];
   setProjectBlocksInMemory(block, true);
   let flat = nestedToFlatArray(block, flatArray[0]._id);
-  flat = set(flat, "0.parent", parent);
+  flat = set(flat, "0._parent", parent);
   blocks = [...blocks, flat, ...getInnerBlocks(flat)];
-
   return blocks;
 }
 

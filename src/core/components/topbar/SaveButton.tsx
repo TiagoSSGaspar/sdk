@@ -1,48 +1,37 @@
-import { useMemo } from "react";
-import { Toggle, Tooltip, TooltipContent, TooltipTrigger } from "../../../ui";
-import { useSavePage, useTranslation } from "../../hooks";
+import { Button } from "../../../ui";
+import { useSavePage } from "../../hooks";
+import { FaCheck } from "react-icons/fa6";
+import { useTranslation } from "react-i18next";
+import { cn } from "../../functions/Functions.ts";
 
 export const SaveButton = () => {
-  const { savePage, syncState } = useSavePage();
+  const { savePage, saveState } = useSavePage();
   const { t } = useTranslation();
 
-  const classes = useMemo(() => {
-    switch (syncState) {
-      case "SAVING":
-        return "animate-pulse bg-gray-500 text-gray-900";
-      case "SAVED":
-        return "bg-green-500 text-white hover:bg-green-600 hover:text-white";
-      default:
-        return "bg-gray-200 text-gray-500 hover:bg-gray-100";
-    }
-  }, [syncState]);
-
-  //BUG: on save the selection is lost
-  return (
-    <div className="flex items-center">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Toggle
-            onClick={(e) => {
-              e.preventDefault();
-              savePage();
-            }}
-            className={`flex h-auto w-20 items-center gap-x-1 rounded-full p-1 px-2 ${classes}`}
-            size="sm"
-            variant="outline">
-            <svg fill="currentColor" width="16" height="16" viewBox="0 0 0.32 0.32" xmlns="http://www.w3.org/2000/svg">
-              <path
-                fillRule="evenodd"
-                d="M.274.086a.02.02 0 0 1 0 .028l-.12.12a.02.02 0 0 1-.028 0l-.06-.06A.02.02 0 0 1 .094.146L.14.192.246.086a.02.02 0 0 1 .028 0Z"
-              />
-            </svg>
-            {syncState === "SAVING" ? "Saving..." : syncState === "SAVED" ? t("Saved") : "Save"}
-          </Toggle>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>{syncState === "SAVING" ? "Saving..." : syncState === "SAVED" ? "Saved" : "Save changes"}</p>
-        </TooltipContent>
-      </Tooltip>
-    </div>
+  const button = (
+    <Button
+      disabled={saveState === "SAVING"}
+      onClick={(e) => {
+        e.preventDefault();
+        savePage();
+      }}
+      className={cn(
+        "flex h-auto w-fit items-center gap-x-2 p-1 px-2",
+        // UNSAVED sate
+        "bg-gray-200 text-gray-500 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-400",
+        {
+          "animate-pulse bg-gray-300 text-gray-900": saveState === "SAVING",
+          "bg-green-500 text-white hover:bg-green-600 hover:text-white dark:bg-green-600 dark:text-white":
+            saveState === "SAVED",
+        },
+      )}
+      size="sm"
+      variant="outline">
+      <FaCheck className={"text-sm text-white"} />
+      <span className={"text-sm"}>
+        {saveState === "SAVING" ? t("saving") : saveState === "SAVED" ? t("saved") : t("unsaved")}
+      </span>
+    </Button>
   );
+  return <div className="flex items-center">{button}</div>;
 };

@@ -1,80 +1,91 @@
-import React, { Suspense, useEffect, useState } from "react";
-import { filter, find, first, groupBy, includes, isEmpty, map, reject, uniq, values } from "lodash";
+import React from "react";
+import { capitalize, filter, find, map, reject, sortBy, values } from "lodash-es";
 import { useAtom } from "jotai";
+import { useTranslation } from "react-i18next";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
   ScrollArea,
-  Skeleton,
   Tabs,
   TabsList,
   TabsTrigger,
 } from "../../../../../ui";
 import { CoreBlock } from "./CoreBlock";
-import { PredefinedBlocks } from "./PredefinedBlocks";
 import { showPredefinedBlockCategoryAtom } from "../../../../atoms/ui";
-import { ChaiBlock } from "../../../../types/ChaiBlock";
-import { useAllBlocks, useSelectedBlockIds, useUILibraryBlocks } from "../../../../hooks";
+import { useBlocksStore, useBuilderProp } from "../../../../hooks";
 import ImportHTML from "./ImportHTML";
-import { useChaiBlocks } from "@chaibuilder/runtime";
+import { mergeClasses, UILibraries } from "../../../../main";
+import { canAcceptChildBlock, canBeNestedInside } from "../../../../functions/block-helpers.ts";
+import { DefaultChaiBlocks } from "./DefaultBlocks.tsx";
+import { atomWithStorage } from "jotai/utils";
 
-/**
- *
- * Checking which block to show in add block list
- *
- */
-const notAllowedInRoot = ["ListItem", "TableHead", "TableBody", "TableRow", "TableCell", "Column"];
-const isAllowedBlockType = (block: ChaiBlock | null | undefined, type: string) => {
-  if (!block) return !includes(notAllowedInRoot, type);
+const CORE_GROUPS = ["basic", "typography", "media", "layout", "form", "advanced", "other"];
 
-  const parentType = block._type;
-  if (parentType === "List") return type === "ListItem";
-  else if (parentType === "Table") return type === "TableHead" || type === "TableBody";
-  else if (parentType === "TableHead" || parentType === "TableBody") return type === "TableRow";
-  else if (parentType === "TableRow") return type === "TableCell";
-  else if (parentType === "Row") return type === "Column";
-  return !includes(notAllowedInRoot, type);
+export const ChaiBuilderBlocks = ({ groups, blocks, parentId, gridCols = "grid-cols-4" }: any) => {
+  const { t } = useTranslation();
+  const [allBlocks] = useBlocksStore();
+  const parentType = find(allBlocks, (block) => block._id === parentId)?._type;
+  return React.Children.toArray(
+    map(
+      sortBy(groups, (group: string) => (CORE_GROUPS.indexOf(group) === -1 ? 99 : CORE_GROUPS.indexOf(group))),
+      (group: string) =>
+        reject(filter(values(blocks), { group }), { hidden: true }).length ? (
+          <Accordion type="single" value={group} collapsible className="w-full">
+            <AccordionItem value={group} className={"border-border"}>
+              <AccordionTrigger className="rounded-md bg-background px-4 py-2 capitalize text-foreground hover:no-underline">
+                {capitalize(t(group.toLowerCase()))}
+              </AccordionTrigger>
+              <AccordionContent className="mx-auto max-w-xl p-3">
+                <div className={"grid gap-2 " + gridCols}>
+                  {React.Children.toArray(
+                    reject(filter(values(blocks), { group }), { hidden: true }).map((block) => {
+                      return (
+                        <CoreBlock
+                          parentId={parentId}
+                          block={block}
+                          disabled={
+                            !canAcceptChildBlock(parentType, block.type) || !canBeNestedInside(parentType, block.type)
+                          }
+                        />
+                      );
+                    }),
+                  )}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        ) : null,
+    ),
+  );
 };
 
-const AddBlocksPanel = () => {
-  const [tab, setTab] = useState<string>("core");
-  const [active, setActive] = useState<string>("basic");
-  const chaiBlocks = useChaiBlocks();
+const addBlockTabAtom = atomWithStorage<string>("__add_block_tab", "library");
+
+const AddBlocksPanel = ({
+  className,
+  showHeading = true,
+  parentId = undefined,
+}: {
+  parentId?: string;
+  showHeading?: boolean;
+  className?: string;
+}) => {
+  const { t } = useTranslation();
+  const [tab, setTab] = useAtom(addBlockTabAtom);
   const [, setCategory] = useAtom(showPredefinedBlockCategoryAtom);
-
-  const [ids] = useSelectedBlockIds();
-  const blocks = useAllBlocks();
-  const block = find(blocks, { _id: first(ids) });
-
-  const { data: predefinedBlocks, isLoading } = useUILibraryBlocks();
-  const groupedBlocks = groupBy(
-    filter(chaiBlocks, (cBlock: any) => isAllowedBlockType(block, cBlock.type)),
-    "category",
-  ) as { core: any[]; custom: any[] };
-
-  const uniqueTypeGroup = uniq(map(groupedBlocks.core, "group"));
-
-  // * setting active tab if not already selected from current unique list
-  useEffect(() => {
-    if (!includes(uniqueTypeGroup, active) && !isEmpty(uniqueTypeGroup) && !isEmpty(active)) {
-      setActive(first(uniqueTypeGroup) as string);
-    }
-  }, [uniqueTypeGroup, active]);
-
-  const onToggle = (value: string) => setActive((oldValue) => (oldValue === value ? "" : value));
-  const hasUiBlocks =
-    (!isLoading && !isEmpty(predefinedBlocks)) || find(values(chaiBlocks), { category: "custom" }) !== undefined;
-
+  const importHTMLSupport = useBuilderProp("importHTMLSupport", true);
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <div className="mb-2 flex flex-col justify-between rounded-md bg-background/30 p-1">
-        <h1 className="flex flex-col items-baseline px-1 text-xl font-semibold xl:flex-col">Add block</h1>
-        <span className="p-0 text-xs font-light leading-3 opacity-80 xl:pl-1">
-          {tab === "html" ? "(Enter or paste TailwindCSS HTML snippet)" : "(Click to add block to page)"}
-        </span>
-      </div>
+    <div className={mergeClasses("flex h-full w-full flex-col overflow-hidden", className)}>
+      {showHeading ? (
+        <div className="mb-2 flex flex-col justify-between rounded-md bg-background/30 p-1">
+          <h1 className="flex flex-col items-baseline px-1 text-xl font-semibold xl:flex-col">{t("Add block")}</h1>
+          <span className="p-0 text-xs font-light leading-3 opacity-80 xl:pl-1">
+            {tab === "html" ? t("enter_paste_tailwind_html") : t("click_to_add_block")}
+          </span>
+        </div>
+      ) : null}
 
       <Tabs
         onValueChange={(_tab) => {
@@ -82,47 +93,22 @@ const AddBlocksPanel = () => {
           setTab(_tab);
         }}
         value={tab}
-        className="h-max">
-        <TabsList className={"grid w-full " + (hasUiBlocks ? "grid-cols-3" : "grid-cols-2")}>
-          <TabsTrigger value="core">Core</TabsTrigger>
-          {hasUiBlocks ? <TabsTrigger value="ui-blocks">Custom Blocks</TabsTrigger> : null}
-          <TabsTrigger value="html">Import </TabsTrigger>
+        className={mergeClasses("h-max")}>
+        <TabsList className={"grid w-full " + (importHTMLSupport ? "grid-cols-3" : "grid-cols-2")}>
+          <TabsTrigger value="library">{t("library")}</TabsTrigger>
+          <TabsTrigger value="core">{t("blocks")}</TabsTrigger>
+          {importHTMLSupport ? <TabsTrigger value="html">{t("import")}</TabsTrigger> : null}
         </TabsList>
       </Tabs>
       {tab === "core" && (
-        <ScrollArea className="-mx-1.5 h-full">
-          <Accordion type="single" value={active} className="w-full px-3">
-            {React.Children.toArray(
-              map(uniqueTypeGroup, (group) =>
-                reject(filter(values(groupedBlocks.core), { group }), {
-                  hidden: true,
-                }).length ? (
-                  <AccordionItem value={group} className="border-border">
-                    <AccordionTrigger onClick={() => onToggle(group)} className="py-2 capitalize">
-                      {group}
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <div className="grid grid-cols-3 gap-2">
-                        {React.Children.toArray(
-                          reject(filter(values(groupedBlocks.core), { group }), { hidden: true }).map((block) => (
-                            <CoreBlock block={block} />
-                          )),
-                        )}
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                ) : null,
-              ),
-            )}
-          </Accordion>
+        <ScrollArea className="-mx-1.5 h-[calc(100vh-156px)] overflow-y-auto">
+          <div className="mt-2 w-full">
+            <DefaultChaiBlocks gridCols={"grid-cols-4"} parentId={parentId} />
+          </div>
         </ScrollArea>
       )}
-      {tab === "ui-blocks" && (
-        <Suspense fallback={<Skeleton className="h-32 w-full" />}>
-          <PredefinedBlocks />
-        </Suspense>
-      )}
-      {tab === "html" && <ImportHTML />}
+      {tab === "library" && <UILibraries parentId={parentId} />}
+      {tab === "html" && importHTMLSupport ? <ImportHTML parentId={parentId} /> : null}
     </div>
   );
 };

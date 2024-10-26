@@ -1,8 +1,8 @@
 import React, { LazyExoticComponent, Suspense } from "react";
-import { Languages } from "./Languages";
 import { Separator, Skeleton } from "../../../ui";
 import { SaveButton } from "./SaveButton";
 import { useBuilderProp } from "../../hooks";
+import { Preview } from "./Preview.tsx";
 
 const Topbar = () => {
   const leftComponents: LazyExoticComponent<any>[] = useBuilderProp("topBarComponents.left", []);
@@ -31,8 +31,8 @@ const Topbar = () => {
           )),
         )}
       </div>
-      <div className="flex items-center space-x-2">
-        <Languages />
+      <div className="flex items-center space-x-1">
+        <Preview />
         <Separator orientation="vertical" />
         {editable ? <SaveButton /> : null}
         {React.Children.toArray(

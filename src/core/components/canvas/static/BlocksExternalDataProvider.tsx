@@ -1,4 +1,4 @@
-import { each, find } from "lodash";
+import { each, find } from "lodash-es";
 import { useEffect } from "react";
 import { useChaiExternalData } from "./useChaiExternalData.ts";
 import { usePageDataProviders } from "../../../hooks/usePageDataProviders.ts";
@@ -16,6 +16,7 @@ const BlocksExternalDataProvider = ({ children }: any) => {
       if (dataProvider) {
         const dataFn = dataProvider?.mockFn || dataProvider?.dataFn;
         if (dataFn) {
+          //TODO: Pass current page object
           // @ts-ignore
           dataFn(provider.args).then((data) =>
             setExternalData((prev: any) => ({ ...prev, [provider.providerKey]: data })),

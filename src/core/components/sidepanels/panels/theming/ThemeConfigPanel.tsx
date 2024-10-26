@@ -1,0 +1,176 @@
+import * as React from "react";
+import { RJSFSchema, UiSchema } from "@rjsf/utils";
+import validator from "@rjsf/validator-ajv8";
+import Form, { IChangeEvent } from "@rjsf/core";
+import { useBrandingOptions } from "../../../../hooks";
+import { Color, Numeric, SelectOption } from "@chaibuilder/runtime/controls";
+import { ColorField } from "../../../../rjsf-widgets/color.tsx";
+import { useBlocksContainer } from "../../../../hooks/useBrandingOptions.ts";
+import { useTranslation } from "react-i18next";
+import { cn } from "../../../../functions/Functions.ts";
+
+const FONTS = [
+  { title: "Roboto", value: "Roboto" },
+  { title: "Open Sans", value: "Open Sans" },
+  { title: "Montserrat", value: "Montserrat" },
+  { title: "Lato", value: "Lato" },
+  { title: "Poppins", value: "Poppins" },
+  { title: "Oswald", value: "Oswald" },
+  { title: "Raleway", value: "Raleway" },
+  { title: "Ubuntu", value: "Ubuntu" },
+  { title: "Nunito", value: "Nunito" },
+  { title: "Merriweather", value: "Merriweather" },
+  { title: "Nunito Sans", value: "Nunito Sans" },
+  { title: "Playfair Display", value: "Playfair Display" },
+  { title: "Rubik", value: "Rubik" },
+  { title: "Inter", value: "Inter" },
+  { title: "Lora", value: "Lora" },
+  { title: "Kanit", value: "Kanit" },
+  { title: "Fira Sans", value: "Fira Sans" },
+  { title: "Hind", value: "Hind" },
+  { title: "Quicksand", value: "Quicksand" },
+  { title: "Mulish", value: "Mulish" },
+  { title: "Barlow", value: "Barlow" },
+  { title: "Inconsolata", value: "Inconsolata" },
+  { title: "Titillium Web", value: "Titillium Web" },
+  { title: "Heebo", value: "Heebo" },
+  { title: "IBM Plex Sans", value: "IBM Plex Sans" },
+  { title: "DM Sans", value: "DM Sans" },
+  { title: "Nanum Gothic", value: "Nanum Gothic" },
+  { title: "Karla", value: "Karla" },
+  { title: "Arimo", value: "Arimo" },
+  { title: "Cabin", value: "Cabin" },
+  { title: "Oxygen", value: "Oxygen" },
+  { title: "Overpass", value: "Overpass" },
+  { title: "Assistant", value: "Assistant" },
+  { title: "Tajawal", value: "Tajawal" },
+  { title: "Play", value: "Play" },
+  { title: "Exo", value: "Exo" },
+  { title: "Cinzel", value: "Cinzel" },
+  { title: "Faustina", value: "Faustina" },
+  { title: "Philosopher", value: "Philosopher" },
+  { title: "Gelasio", value: "Gelasio" },
+  { title: "Sofia Sans Condensed", value: "Sofia Sans Condensed" },
+  { title: "Noto Sans Devanagari", value: "Noto Sans Devanagari" },
+  { title: "Actor", value: "Actor" },
+  { title: "Epilogue", value: "Epilogue" },
+  { title: "Glegoo", value: "Glegoo" },
+  { title: "Overlock", value: "Overlock" },
+  { title: "Lustria", value: "Lustria" },
+  { title: "Ovo", value: "Ovo" },
+  { title: "Suranna", value: "Suranna" },
+  { title: "Bebas Neue", value: "Bebas Neue" },
+  { title: "Manrope", value: "Manrope" },
+];
+
+const ThemeConfigPanel = ({
+  showHeading = true,
+  className = "",
+}: {
+  className?: string;
+  showHeading?: boolean;
+}): React.JSX.Element => {
+  const [brandingOptions, setBrandingOptions] = useBrandingOptions();
+  const [container] = useBlocksContainer();
+  const brandingRef = React.useRef(brandingOptions);
+  const { t } = useTranslation();
+
+  const updateRealtime = ({ formData }: IChangeEvent, id?: string) => {
+    if (id) {
+      setBrandingOptions(formData);
+      brandingRef.current = formData;
+    }
+  };
+
+  const {
+    bodyFont,
+    headingFont,
+    primaryColor,
+    bodyTextDarkColor,
+    bodyTextLightColor,
+    bodyBgDarkColor,
+    secondaryColor,
+    bodyBgLightColor,
+    roundedCorners,
+  }: any = brandingOptions;
+
+  let brandingProperties: Record<string, any> = {
+    headingFont: SelectOption({
+      title: t("theme_config.heading_font"),
+      default: headingFont,
+      options: FONTS,
+    }),
+    bodyFont: SelectOption({
+      title: t("theme_config.body_font"),
+      default: bodyFont,
+      options: FONTS,
+    }),
+    roundedCorners: Numeric({
+      title: t("theme_config.rounded_corner"),
+      default: parseInt(roundedCorners || 5, 10),
+    }),
+    primaryColor: Color({ title: t("theme_config.primary"), default: primaryColor }),
+    secondaryColor: Color({ title: t("theme_config.secondary"), default: secondaryColor }),
+  };
+
+  if (!container) {
+    brandingProperties = {
+      ...brandingProperties,
+      bodyBgLightColor: Color({
+        title: t("theme_config.background"),
+        default: bodyBgLightColor,
+      }),
+      bodyTextLightColor: Color({
+        title: t("theme_config.text_color"),
+        default: bodyTextDarkColor,
+      }),
+      bodyBgDarkColor: Color({
+        title: t("theme_config.background_dark_mode"),
+        default: bodyBgDarkColor,
+      }),
+      bodyTextDarkColor: Color({
+        title: t("theme_config.text_color_dark_mode"),
+        default: bodyTextLightColor,
+      }),
+    };
+  }
+
+  const propsSchema: RJSFSchema = {
+    type: "object",
+    properties: {},
+  };
+  const uiSchema: UiSchema = {};
+
+  Object.keys(brandingProperties).forEach((key) => {
+    const property = brandingProperties[key];
+    if (!propsSchema.properties) propsSchema.properties = {};
+    propsSchema.properties[key] = property.schema;
+    uiSchema[key] = property.uiSchema;
+    return true;
+  });
+
+  return (
+    <div className={cn("flex h-full w-full select-none flex-col", className)}>
+      {showHeading ? (
+        <div className="rounded-md bg-background/30 p-1">
+          <h1 className="px-1 font-semibold">{t("Theme Configuration")}</h1>
+        </div>
+      ) : null}
+      <Form
+        widgets={{ color: ColorField }}
+        idSeparator="."
+        autoComplete="off"
+        omitExtraData
+        liveOmit
+        liveValidate
+        uiSchema={uiSchema}
+        schema={propsSchema}
+        formData={brandingOptions}
+        validator={validator}
+        onChange={updateRealtime}
+      />
+    </div>
+  );
+};
+
+export default ThemeConfigPanel;

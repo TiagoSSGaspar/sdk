@@ -1,9 +1,11 @@
 import { useCallback, useMemo } from "react";
 import { atom, useAtom, useAtomValue } from "jotai";
-import { filter, find, get as getProp, includes, isUndefined, map, without } from "lodash";
+import { cloneDeep, compact, filter, get, get as getProp, includes, isEmpty, map, without } from "lodash-es";
 import { atomWithStorage } from "jotai/utils";
 import { presentBlocksAtom } from "../atoms/blocks";
 import { ChaiBlock } from "../types/ChaiBlock";
+import { getBlockComponent } from "@chaibuilder/runtime";
+import { ChaiControlDefinition } from "@chaibuilder/runtime/controls";
 
 /**
  * Core selected  ids atom
@@ -14,7 +16,7 @@ selectedBlockIdsAtom.debugLabel = "selectedBlockIdsAtom";
 /**
  * Derived atoms
  */
-const selectedBlocksAtom = atom<Array<string>>((get) => {
+const selectedBlocksAtom = atom<ChaiBlock[]>((get) => {
   const blocks = get(presentBlocksAtom);
   const blockIds = get(selectedBlockIdsAtom);
   return map(
@@ -33,20 +35,15 @@ export const selectedBlockAtom = atom((get) => {
     return null;
   }
   if (blocks.length === 1) {
-    return blocks[0];
+    return blocks[0] as ChaiBlock;
   }
-
-  return {
-    type: "Multiple",
-    id: map(blocks, "id"),
-  };
 });
 selectedBlockAtom.debugLabel = "selectedBlockAtom";
 
 // FIXME: This is a hacky way to check if the selected blocks are flex children
 // const areFlexChild = (classes: string) => classes.match(/flex( |$)/g) !== null;
 // const areGridChild = (classes: string) => classes.match(/grid( |$)/g) !== null;
-const getParentId = (block: ChaiBlock | {}) => getProp(block, "parent", null);
+const getParentId = (block: ChaiBlock | {}) => getProp(block, "_parent", null);
 
 export const selectedBlocksParentsAtom = atom((get) => {
   const selectedBlocks = get(selectedBlocksAtom);
@@ -100,27 +97,53 @@ export const useSelectedBlocksDisplayChild = () => ({
 /**
  * useSelectedBlock hook
  */
-export const useSelectedBlock = () => useAtomValue(selectedBlockAtom);
+//@ts-ignore
+export const useSelectedBlock = () => useAtomValue<ChaiBlock>(selectedBlockAtom);
+
+export const selectedBlockHierarchy = atom((get) => {
+  const selectedBlock = get(selectedBlockAtom);
+  const allBlocks = get(presentBlocksAtom);
+  let block = selectedBlock;
+  const blocks = [selectedBlock];
+  do {
+    const parentBlock = allBlocks.find(({ _id }) => _id === block?._parent);
+    block = parentBlock;
+    if (parentBlock) blocks.push(parentBlock);
+  } while (block?._parent);
+
+  return blocks;
+});
 
 /**
  * TODO: Add test cases for this hook
  */
 export const useSelectedBlockHierarchy = () => {
-  const [ids] = useSelectedBlockIds();
-  const blocks = useAtomValue(presentBlocksAtom);
-  const hierarchy = useMemo<ChaiBlock[]>(() => {
-    const nestedBlocks: ChaiBlock[] = [find(blocks, (block) => block._id === ids[0])];
-    let parent: string | undefined | null = getProp(nestedBlocks[0], "_parent");
-    while (parent) {
-      const parentBlock: ChaiBlock = find(blocks, { id: parent }) as ChaiBlock;
-      nestedBlocks.push(parentBlock);
-      parent = getProp(parentBlock, "_parent");
-    }
-    return nestedBlocks;
-  }, [ids, blocks]);
+  return compact(useAtomValue(selectedBlockHierarchy));
+};
 
-  if (ids.length > 1) return [];
-  return filter(hierarchy, (block) => !isUndefined(block));
+export const useSelectedBlockCanvasSetting = () => {
+  const allParentBlocks = useSelectedBlockHierarchy();
+  return useMemo(() => {
+    for (let i = 0; i < allParentBlocks.length; i++) {
+      const coreBlock = getBlockComponent(allParentBlocks[i]._type);
+      const settings = cloneDeep(get(coreBlock, "blockState", {})) as { [key: string]: ChaiControlDefinition };
+      if (!isEmpty(settings)) return { settings, block: allParentBlocks[i] };
+    }
+    return {};
+  }, [allParentBlocks]);
+};
+
+export const useSelectedBlockCustomStylingStates = () => {
+  const allParentBlocks = useSelectedBlockHierarchy();
+  return useMemo<Record<string, string>>(() => {
+    let customStylingStates = {};
+    for (let i = 0; i < allParentBlocks.length; i++) {
+      const coreBlock = getBlockComponent(allParentBlocks[i]._type);
+      const states = get(coreBlock, "customStylingStates", {});
+      customStylingStates = { ...customStylingStates, ...states };
+    }
+    return customStylingStates;
+  }, [allParentBlocks]);
 };
 
 /**

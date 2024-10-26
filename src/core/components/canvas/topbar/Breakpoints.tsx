@@ -1,5 +1,6 @@
+import { useTranslation } from "react-i18next";
 import { DesktopIcon, DotsVerticalIcon, LaptopIcon, MobileIcon } from "@radix-ui/react-icons";
-import { includes, map, toUpper } from "lodash";
+import { includes, map, toUpper } from "lodash-es";
 import {
   Button,
   DropdownMenu,
@@ -12,7 +13,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "../../../../ui";
-import { useCanvasWidth, useSelectedBreakpoints } from "../../../hooks";
+import { useBuilderProp, useCanvasWidth, useSelectedBreakpoints } from "../../../hooks";
 
 interface BreakpointItemType {
   breakpoint: string;
@@ -30,61 +31,56 @@ interface BreakpointCardProps extends BreakpointItemType {
 const TabletIcon = ({ landscape = false }) => (
   <svg
     className={landscape ? "rotate-90" : ""}
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 13 13"
-    xmlSpace="preserve"
-    width={13}
-    height={13}>
-    <g strokeWidth={0} />
-    <g strokeLinecap="round" strokeLinejoin="round" />
-    <path
-      d="M10.65 0H2.349a.851.851 0 0 0-.851.852v11.299c0 .47.382.852.851.852h8.3a.851.851 0 0 0 .851-.852V.852A.851.851 0 0 0 10.65 0zM6.599 12.466a.367.367 0 1 1 0-.735.367.367 0 0 1 0 .735zm3.9-1.267H2.5V1h8.001v10.199z"
-      style={{
-        fill: "#000",
-      }}
-    />
+    stroke="currentColor"
+    fill="currentColor"
+    strokeWidth="0"
+    viewBox="0 0 448 512"
+    height="14px"
+    width="14px"
+    xmlns="http://www.w3.org/2000/svg">
+    <path d="M400 0H48C21.5 0 0 21.5 0 48v416c0 26.5 21.5 48 48 48h352c26.5 0 48-21.5 48-48V48c0-26.5-21.5-48-48-48zM224 480c-17.7 0-32-14.3-32-32s14.3-32 32-32 32 14.3 32 32-14.3 32-32 32zm176-108c0 6.6-5.4 12-12 12H60c-6.6 0-12-5.4-12-12V60c0-6.6 5.4-12 12-12h328c6.6 0 12 5.4 12 12v312z"></path>
   </svg>
 );
 
-const BREAKPOINTS: BreakpointItemType[] = [
+const WEB_BREAKPOINTS: BreakpointItemType[] = [
   {
-    title: "Mobile (XS)",
-    content: "Styles set here are applied to all screen unless edited at higher breakpoint",
+    title: "mobile_xs_title",
+    content: "mobile_xs_content",
     breakpoint: "xs",
     icon: <MobileIcon />,
     width: 400,
   },
   {
-    title: "Mobile landscape (SM)",
-    content: "Styles set here are applied at 640px and up unless edited at higher breakpoint",
+    title: "mobile_sm_title",
+    content: "mobile_sm_content",
     breakpoint: "sm",
     icon: <MobileIcon className="rotate-90" />,
     width: 640,
   },
   {
-    title: "Tablet (MD)",
-    content: "Styles set here are applied at 768px and up",
+    title: "tablet_md_title",
+    content: "tablet_md_content",
     breakpoint: "md",
     icon: <TabletIcon />,
     width: 800,
   },
   {
-    title: "Tablet Landscape (LG)",
-    content: "Styles set here are applied at 1024px and up unless edited at higher breakpoint",
+    title: "tablet_lg_title",
+    content: "tablet_lg_content",
     breakpoint: "lg",
     icon: <TabletIcon landscape />,
     width: 1024,
   },
   {
-    title: "Desktop (XL)",
-    content: "Styles set here are applied at 1280px and up unless edited at higher breakpoint",
+    title: "desktop_xl_title",
+    content: "desktop_xl_content",
     breakpoint: "xl",
     icon: <LaptopIcon />,
     width: 1420,
   },
   {
-    title: "Large Desktop (2XL)",
-    content: "Styles set here are applied at 1536px and up",
+    title: "large_desktop_2xl_title",
+    content: "large_desktop_2xl_content",
     breakpoint: "2xl",
     icon: <DesktopIcon />,
     width: 1920,
@@ -99,30 +95,35 @@ const BreakpointCard = ({
   width,
   icon,
   onClick,
-}: BreakpointCardProps) => (
-  <HoverCard>
-    <HoverCardTrigger asChild>
-      <Button
-        onClick={() => onClick(width)}
-        size="sm"
-        variant={breakpoint === currentBreakpoint ? "secondary" : "ghost"}>
-        {icon}
-      </Button>
-    </HoverCardTrigger>
-    <HoverCardContent className="w-52 border-border">
-      <div className="flex justify-between space-x-4">
-        <div className="space-y-1">
-          <h4 className="text-sm font-semibold">{title}</h4>
-          <p className="text-xs">{content}</p>
+}: BreakpointCardProps) => {
+  const { t } = useTranslation();
+  return (
+    <HoverCard>
+      <HoverCardTrigger asChild>
+        <Button
+          onClick={() => onClick(width)}
+          size="sm"
+          variant={breakpoint === currentBreakpoint ? "secondary" : "ghost"}>
+          {icon}
+        </Button>
+      </HoverCardTrigger>
+      <HoverCardContent className="w-52 border-border">
+        <div className="flex justify-between space-x-4">
+          <div className="space-y-1">
+            <h4 className="text-sm font-semibold">{t(title)}</h4>
+            <p className="text-xs">{t(content)}</p>
+          </div>
         </div>
-      </div>
-    </HoverCardContent>
-  </HoverCard>
-);
+      </HoverCardContent>
+    </HoverCard>
+  );
+};
 
 export const Breakpoints = () => {
   const [, breakpoint, setNewWidth] = useCanvasWidth();
   const [selectedBreakpoints, setSelectedBreakpoints] = useSelectedBreakpoints();
+  const { t } = useTranslation();
+  const breakpoints = useBuilderProp("breakpoints", WEB_BREAKPOINTS);
 
   const toggleBreakpoint = (newBreakPoint: string) => {
     if (selectedBreakpoints.includes(newBreakPoint)) {
@@ -134,10 +135,20 @@ export const Breakpoints = () => {
     }
   };
 
+  if (breakpoints.length < 4) {
+    return (
+      <div className="flex items-center rounded-md">
+        {map(breakpoints, (bp) => (
+          <BreakpointCard {...bp} onClick={setNewWidth} key={bp.breakpoint} currentBreakpoint={breakpoint} />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center rounded-md">
       {map(
-        BREAKPOINTS.filter((bp: BreakpointItemType) => includes(selectedBreakpoints, toUpper(bp.breakpoint))),
+        breakpoints.filter((bp: BreakpointItemType) => includes(selectedBreakpoints, toUpper(bp.breakpoint))),
         (bp: BreakpointItemType) => (
           <BreakpointCard {...bp} onClick={setNewWidth} key={bp.breakpoint} currentBreakpoint={breakpoint} />
         ),
@@ -149,15 +160,15 @@ export const Breakpoints = () => {
           </span>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-56 border-border text-xs">
-          <DropdownMenuLabel>Breakpoints</DropdownMenuLabel>
+          <DropdownMenuLabel>{t("Breakpoints")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {map(BREAKPOINTS, (bp: BreakpointItemType) => (
+          {map(breakpoints, (bp: BreakpointItemType) => (
             <DropdownMenuCheckboxItem
               key={bp.breakpoint}
               disabled={bp.breakpoint === "xs"}
               onCheckedChange={() => toggleBreakpoint(toUpper(bp.breakpoint))}
               checked={includes(selectedBreakpoints, toUpper(bp.breakpoint))}>
-              {bp.title}
+              {t(bp.title)}
             </DropdownMenuCheckboxItem>
           ))}
         </DropdownMenuContent>

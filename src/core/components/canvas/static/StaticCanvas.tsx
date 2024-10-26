@@ -1,13 +1,12 @@
 // @ts-nochecks
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { first, isEmpty } from "lodash";
+import { first, isEmpty } from "lodash-es";
 import { useAtom } from "jotai";
 import {
   useBuilderProp,
   useCanvasWidth,
   useHighlightBlockId,
-  usePreviewMode,
   useSelectedBlock,
   useSelectedBlockIds,
   useSelectedStylingBlocks,
@@ -22,16 +21,16 @@ import { BlockActionsStatic } from "../BlockFloatingActions.tsx";
 import { HeadTags } from "./HeadTags.tsx";
 import { Skeleton } from "../../../../ui";
 import { ChaiBlock } from "../../../types/ChaiBlock";
-import { StaticBlocksRenderer } from "./StaticBlocksRenderer.tsx"; // const FrameComponent = Frame.default;
-
-// const FrameComponent = Frame.default;
+import { StaticBlocksRenderer } from "./StaticBlocksRenderer.tsx";
+import { Provider } from "react-wrap-balancer";
+import { AddBlockAtBottom } from "./AddBlockAtBottom.tsx";
+import { ResizableCanvasWrapper } from "./ResizableCanvasWrapper.tsx";
 
 const getElementByStyleId = (doc: any, styleId: string): HTMLElement =>
   doc.querySelector(`[data-style-id="${styleId}"]`) as HTMLElement;
 
 const StaticCanvas = (): React.JSX.Element => {
   const [networkMode] = useAtom(networkModeAtom);
-  const [preview] = usePreviewMode();
   const [width] = useCanvasWidth();
   const [, setIds] = useSelectedBlockIds();
   const selectedBlock: any = useSelectedBlock();
@@ -40,20 +39,22 @@ const StaticCanvas = (): React.JSX.Element => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [dimension, setDimension] = useState({ width: 0, height: 0 });
   const scale = useCanvasScale(dimension);
-  const [initialWidth, setInitialWidth] = useState(0);
   const [selectedElements, setSelectedElements] = useState<HTMLElement[]>([]);
   const [, setSelectedStyleElements] = useState<HTMLElement[] | null[]>([]);
   const [, setCanvasIframe] = useAtom(canvasIframeAtom);
   const [stylingBlocks, setStylingBlocks] = useSelectedStylingBlocks();
-  const loadingCanvas = useBuilderProp("loadingCanvas", false);
+  const loadingCanvas = useBuilderProp("loading", false);
+  const htmlDir = useBuilderProp("htmlDir", "ltr");
+
+  const setNewWidth = (newWidth: number) => {
+    setDimension((prev) => ({ ...prev, width: newWidth }));
+  };
 
   useEffect(() => {
+    if (!wrapperRef.current) return;
     const { clientWidth, clientHeight } = wrapperRef.current as HTMLDivElement;
     setDimension({ width: clientWidth, height: clientHeight });
-    if (initialWidth === 0) {
-      setInitialWidth(clientWidth);
-    }
-  }, [wrapperRef, width, initialWidth]);
+  }, [wrapperRef, width]);
 
   const isInViewport = (element: HTMLElement, offset = 0) => {
     const { top } = element.getBoundingClientRect();
@@ -90,6 +91,7 @@ const StaticCanvas = (): React.JSX.Element => {
 
   const iframeContent: string = useMemo(() => {
     let initialHTML = IframeInitialContent;
+    initialHTML = initialHTML.replace("__HTML_DIR__", htmlDir);
     if (networkMode === "offline") {
       initialHTML = initialHTML.replace(
         "https://old.chaibuilder.com/offline/tailwind.cdn.js",
@@ -99,45 +101,55 @@ const StaticCanvas = (): React.JSX.Element => {
       initialHTML = initialHTML.replace("https://unpkg.com/aos@next/dist/aos.js", "/offline/aos.js");
     }
     return initialHTML;
-  }, [networkMode]);
+  }, [networkMode, htmlDir]);
 
   return (
-    <div
-      onClick={() => {
-        setIds([]);
-        setStylingBlocks([]);
-      }}
-      onMouseLeave={() => setTimeout(() => highlight(""), 300)}
-      className="relative mx-auto h-full w-full"
-      style={initialWidth > 0 && !isEmpty(scale) ? { width: preview ? "100%" : initialWidth } : {}}
-      ref={wrapperRef}>
-      {/*// @ts-ignore*/}
-      <ChaiFrame
-        contentDidMount={() => setCanvasIframe(iframeRef.current as HTMLIFrameElement)}
-        ref={iframeRef as any}
-        id="canvas-iframe"
-        style={{ width: `${width}px`, ...scale }}
-        className="relative mx-auto box-content h-full max-w-full shadow-lg transition-all duration-300 ease-linear"
-        initialContent={iframeContent}>
-        <KeyboardHandler />
-        <BlockActionsStatic
-          block={selectedBlock as unknown as ChaiBlock}
-          selectedBlockElement={first(selectedElements)}
-        />
-        <HeadTags model="page" />
-        <Canvas>
-          {loadingCanvas ? (
-            <div className="h-full p-4">
-              <Skeleton className="h-full" />
-            </div>
-          ) : (
-            <StaticBlocksRenderer />
-          )}
-        </Canvas>
-        <div id={"placeholder"} className={"absolute bg-green-500 z-[99999] max-w-full transition-transform"}></div>
-      </ChaiFrame>
-    </div>
+    <ResizableCanvasWrapper onMount={setNewWidth} onResize={setNewWidth}>
+      <div
+        onClick={() => {
+          setIds([]);
+          setStylingBlocks([]);
+        }}
+        onMouseLeave={() => setTimeout(() => highlight(""), 300)}
+        className="relative mx-auto h-full w-full overflow-hidden"
+        ref={wrapperRef}>
+        {/*// @ts-ignore*/}
+        <ChaiFrame
+          contentDidMount={() => setCanvasIframe(iframeRef.current as HTMLIFrameElement)}
+          ref={iframeRef as any}
+          id="canvas-iframe"
+          style={{ ...scale, ...(isEmpty(scale) ? { width: `${width}px` } : {}) }}
+          className="relative mx-auto box-content h-full w-full max-w-full shadow-lg transition-all duration-300 ease-linear"
+          initialContent={iframeContent}>
+          <KeyboardHandler />
+          <BlockActionsStatic
+            block={selectedBlock as unknown as ChaiBlock}
+            selectedBlockElement={first(selectedElements)}
+          />
+          <HeadTags />
+          <Provider>
+            <Canvas>
+              {loadingCanvas ? (
+                <div className="h-full p-4">
+                  <Skeleton className="h-full" />
+                </div>
+              ) : (
+                <StaticBlocksRenderer />
+              )}
+              <AddBlockAtBottom />
+              <br />
+              <br />
+              <br />
+            </Canvas>
+          </Provider>
+          <div
+            id="placeholder"
+            className="pointer-events-none absolute z-[99999] max-w-full bg-green-500 transition-transform"
+          />
+        </ChaiFrame>
+      </div>
+    </ResizableCanvasWrapper>
   );
 };
 
-export { StaticCanvas };
+export default StaticCanvas;

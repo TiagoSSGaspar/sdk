@@ -1,63 +1,108 @@
 import { IChangeEvent } from "@rjsf/core";
-import { capitalize, cloneDeep, each, get, isEmpty, keys, map } from "lodash";
-import { useBuilderProp, useCanvasHistory, useSelectedBlock, useUpdateBlocksPropsRealtime } from "../../hooks";
-import { ChaiControlDefinition, SingleLineText } from "@chaibuilder/runtime/controls";
-import DataBindingSetting from "../../../ui/widgets/rjsf/widgets/data-binding";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../../../ui";
-import { useMemo } from "react";
+import { capitalize, cloneDeep, debounce, each, get, isEmpty, keys, map, forEach } from "lodash-es";
+import {
+  useBuilderProp,
+  useLanguages,
+  useSelectedBlock,
+  useTranslation,
+  useUpdateBlocksProps,
+  useUpdateBlocksPropsRealtime,
+} from "../../hooks";
+import { ChaiControlDefinition } from "@chaibuilder/runtime/controls";
+import DataBindingSetting from "../../rjsf-widgets/data-binding.tsx";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger, Button } from "../../../ui";
+import { useCallback, useMemo, useState } from "react";
 import { getBlockComponent } from "@chaibuilder/runtime";
 import { JSONForm } from "./JSONForm.tsx";
+import { CanvasSettings } from "./CanvasSettings.tsx";
+import { convertDotNotationToObject } from "../../functions/Controls.ts";
+import { GlobalBlockSettings } from "./GlobalBlockSettings.tsx";
+import { useRSCBlocksStore } from "../../hooks/useWatchRSCBlocks.ts";
+
+const ResetRSCBlockButton = ({ blockId }: { blockId: string }) => {
+  const { t } = useTranslation();
+  const { reset } = useRSCBlocksStore();
+  return (
+    <Button size="sm" variant="outline" onClick={() => reset(blockId)}>
+      {t("Reload")}
+    </Button>
+  );
+};
+
+const formDataWithSelectedLang = (formData, selectedLang: string, coreBlock) => {
+  const updatedFormData = cloneDeep(formData);
+  forEach(keys(formData), (key) => {
+    if (get(coreBlock, ["props", key, "i18n"]) && !isEmpty(selectedLang)) {
+      updatedFormData[key] = get(formData, `${key}-${selectedLang}`);
+    }
+  });
+
+  return updatedFormData;
+};
 
 /**
  *
  * @returns Block Setting
  */
 export default function BlockSettings() {
+  const { selectedLang } = useLanguages();
   const selectedBlock = useSelectedBlock() as any;
-  const { createSnapshot } = useCanvasHistory();
   const updateBlockPropsRealtime = useUpdateBlocksPropsRealtime();
-  const coreBlock = getBlockComponent(selectedBlock._type);
-  const formData = { ...selectedBlock };
+  const updateBlockProps = useUpdateBlocksProps();
+  const coreBlock = getBlockComponent(selectedBlock?._type);
+  const formData = formDataWithSelectedLang(selectedBlock, selectedLang, coreBlock);
+  const [prevFormData, setPrevFormData] = useState(formData);
   const dataBindingSupported = useBuilderProp("dataBindingSupport", false);
 
-  const createHistorySnapshot = () => createSnapshot();
+  const updateProps = ({ formData: newData }: IChangeEvent, id?: string, oldState?: any) => {
+    if (id && prevFormData?._id === selectedBlock._id) {
+      const path = id.replace("root.", "") as string;
+      updateBlockProps([selectedBlock._id], { [path]: get(newData, path) } as any, oldState);
+    }
+  };
+
+  const debouncedCall = useCallback(
+    debounce(({ formData }, id, oldPropState) => {
+      updateProps({ formData } as IChangeEvent, id, oldPropState);
+      setPrevFormData(formData);
+    }, 1500),
+    [selectedBlock?._id, selectedLang],
+  );
 
   const updateRealtime = ({ formData: newData }: IChangeEvent, id?: string) => {
     if (id) {
       const path = id.replace("root.", "") as string;
-      updateBlockPropsRealtime([selectedBlock._id], { [path]: get(newData, path) } as any);
+      updateBlockPropsRealtime(
+        [selectedBlock._id],
+        convertDotNotationToObject(path, get(newData, path.split("."))) as any,
+      );
+      debouncedCall({ formData: newData }, id, { [path]: get(prevFormData, path) });
     }
-  };
-
-  const nameProperties = {
-    _name: SingleLineText({
-      title: "Name",
-      default: get(selectedBlock, "_name", selectedBlock._type),
-    }),
   };
 
   const bindingProps = keys(get(formData, "_bindings", {}));
 
   const staticContentProperties = useMemo(() => {
     const controls = cloneDeep(get(coreBlock, "props", {})) as { [key: string]: ChaiControlDefinition };
+    // remove the hidden props
+    each(controls, (control: ChaiControlDefinition, key: string) => {
+      if (get(control, "hidden", false)) {
+        delete controls[key];
+      }
+    });
     if (!dataBindingSupported) return controls;
-    each(bindingProps, (key) => delete controls[key]);
+    each(bindingProps, (key: string) => delete controls[key]);
     return controls;
   }, [coreBlock, bindingProps, dataBindingSupported]);
 
+  const isRSCBlock = get(coreBlock, "server", false);
+
   return (
-    <div className="overflow-x-hidden">
-      <JSONForm
-        onChange={updateRealtime}
-        createHistorySnapshot={createHistorySnapshot}
-        formData={formData}
-        properties={nameProperties}
-      />
-      <hr className="mt-4" />
+    <div className="overflow-x-hidden px-px">
       {dataBindingSupported ? (
-        <Accordion type="multiple" defaultValue={["STATIC", "BINDING"]} className="h-full w-full">
+        <Accordion type="multiple" defaultValue={["STATIC", "BINDING"]} className="mt-4 h-full w-full">
           <AccordionItem value="BINDING">
-            <AccordionTrigger className="px-3 py-2 text-xs hover:no-underline bg-gray-100 ml-1">
+            <AccordionTrigger className="py-2">
               <div className="flex items-center gap-x-2">
                 <div
                   className={`h-[8px] w-[8px] rounded-full ${
@@ -67,17 +112,17 @@ export default function BlockSettings() {
                 Data Binding
               </div>
             </AccordionTrigger>
-            <AccordionContent className="pt-4 px-4">
+            <AccordionContent className="pt-4">
               <DataBindingSetting
-                bindingData={get(formData, "_bindings", {})}
+                bindingData={get(selectedBlock, "_bindings", {})}
                 onChange={(_bindings) => {
-                  updateRealtime({ formData: { ...formData, _bindings } } as IChangeEvent, "root._bindings");
+                  updateProps({ formData: { _bindings } } as IChangeEvent, "root._bindings");
                 }}
               />
             </AccordionContent>
           </AccordionItem>
           <AccordionItem value="STATIC">
-            <AccordionTrigger className="px-3 py-2 text-xs hover:no-underline bg-gray-100 ml-1">
+            <AccordionTrigger className="py-2">
               <div className="flex items-center gap-x-2">
                 <div className={`h-[8px] w-[8px] rounded-full bg-blue-500`} />
                 Static Content
@@ -85,31 +130,31 @@ export default function BlockSettings() {
             </AccordionTrigger>
             <AccordionContent className="pt-4">
               {!isEmpty(bindingProps) ? (
-                <div className="text-xs mx-4 border rounded-sm p-1 mb-1 mt-0 border-orange-500 text-orange-500 bg-orange-100">
+                <div className="mb-1 mt-0 rounded-sm border border-orange-500 bg-orange-100 p-1 text-xs text-orange-500">
                   Data binding is set for <b>{map(bindingProps, capitalize).join(", ")}</b>{" "}
                   {bindingProps.length === 1 ? "property" : "properties"}. Remove data binding to edit static content.
                 </div>
-              ) : (
-                ""
-              )}
+              ) : null}
               <JSONForm
+                id={selectedBlock?._id}
                 onChange={updateRealtime}
-                createHistorySnapshot={createHistorySnapshot}
                 formData={formData}
                 properties={staticContentProperties}
               />
             </AccordionContent>
           </AccordionItem>
         </Accordion>
-      ) : (
+      ) : !isEmpty(staticContentProperties) ? (
         <JSONForm
+          id={selectedBlock?._id}
           onChange={updateRealtime}
-          createHistorySnapshot={createHistorySnapshot}
           formData={formData}
           properties={staticContentProperties}
         />
-      )}
-      <div className="pb-60"></div>
+      ) : null}
+      {selectedBlock?._type === "GlobalBlock" ? <GlobalBlockSettings /> : null}
+      {isRSCBlock ? <ResetRSCBlockButton blockId={selectedBlock?._id} /> : null}
+      <CanvasSettings />
     </div>
   );
 }

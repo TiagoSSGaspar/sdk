@@ -1,18 +1,17 @@
-import { filter, isEmpty } from "lodash";
-import { Provider } from "react-wrap-balancer";
-import { useAllBlocks } from "../../../hooks";
+import { filter, isEmpty } from "lodash-es";
 import { BlocksRendererStatic } from "./BlocksRenderer";
 import { BlocksExternalDataProvider } from "./BlocksExternalDataProvider.tsx";
+import { useBlocksStore } from "../../../history/useBlocksStoreUndoableActions.ts";
+import { ChaiBlock } from "../../../types/ChaiBlock.ts";
 
 export const StaticBlocksRenderer = () => {
-  const blocks = useAllBlocks();
-  return (
-    <Provider>
-      {isEmpty(blocks) ? null : (
-        <BlocksExternalDataProvider>
-          <BlocksRendererStatic blocks={filter(blocks, (block) => isEmpty(block._parent))} />
-        </BlocksExternalDataProvider>
-      )}
-    </Provider>
+  const [blocks] = useBlocksStore();
+
+  const blocksHtml = isEmpty(blocks) ? null : (
+    <BlocksExternalDataProvider>
+      <BlocksRendererStatic allBlocks={blocks} blocks={filter(blocks, (block: ChaiBlock) => isEmpty(block._parent))} />
+    </BlocksExternalDataProvider>
   );
+
+  return <>{blocksHtml}</>;
 };

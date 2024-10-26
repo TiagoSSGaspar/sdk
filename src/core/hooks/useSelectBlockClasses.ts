@@ -1,11 +1,11 @@
 import { atom, useAtomValue } from "jotai";
-import { filter, first, get as getProp, isNull, map, startsWith } from "lodash";
+import { filter, first, get as getProp, isNull, map, startsWith } from "lodash-es";
 import { ClassDerivedObject, constructClassObject } from "../functions/Class";
 import { selectedBlockAtom, styleStateAtom } from "./useSelectedBlockIds";
 import { darkModeAtom } from "./useDarkMode";
 import { canvasBreakpointAtom } from "./useCanvasWidth";
 import { selectedStylingBlocksAtom } from "./useSelectedStylingBlocks";
-import { STYLES_KEY } from "../constants/CONTROLS";
+import { STYLES_KEY } from "../constants/STRINGS.ts";
 
 /**
  * Derived atom based on selected block classes

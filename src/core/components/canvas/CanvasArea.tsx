@@ -1,36 +1,34 @@
-import React, { lazy, Suspense } from "react";
-import { CanvasTopBar } from "./topbar/CanvasTopBar";
-import { useAtom } from "jotai";
-import { addBlocksModalAtom } from "../../atoms/blocks";
+import React, { Suspense } from "react";
 import { Skeleton } from "../../../ui";
-import { StaticCanvas } from "./static/StaticCanvas";
-import { ErrorBoundary } from "../ErrorBoundary";
+import StaticCanvas from "./static/StaticCanvas";
+import { ErrorBoundary } from "react-error-boundary";
+import { Resizable } from "re-resizable";
+import { useBuilderProp, useCodeEditor } from "../../hooks";
+import { FallbackError } from "../FallbackError.tsx";
+import { noop } from "lodash-es";
+import { Breadcrumb } from "./Breadcrumb.tsx";
 
-const AddBlocksPanel = lazy(() => import("../sidepanels/panels/add-blocks/AddBlocks"));
+const CodeEditor = React.lazy(() => import("./static/CodeEditor"));
 
 const CanvasArea: React.FC = () => {
-  const [addBlocks, setAddBlocks] = useAtom(addBlocksModalAtom);
-
+  const [codeEditor] = useCodeEditor();
+  const onErrorFn = useBuilderProp("onError", noop);
   return (
-    <div className="flex h-full w-full flex-col">
-      <CanvasTopBar />
-      <div className="relative flex-1 overflow-hidden bg-slate-800/90 px-2 bg-[linear-gradient(to_right,#222_0.5px,transparent_0.5px),linear-gradient(to_bottom,#222_0.5px,transparent_0.5px)] bg-[size:12px_12px]">
+    <div className="flex h-full max-h-full w-full flex-1 flex-col">
+      <div className="relative flex h-full max-h-full flex-col overflow-hidden bg-gray-100/40 px-2">
         <Suspense fallback={<Skeleton className="h-full" />}>
-          <ErrorBoundary>
+          <ErrorBoundary fallback={<FallbackError />} onError={onErrorFn}>
             <StaticCanvas />
           </ErrorBoundary>
         </Suspense>
-        {addBlocks ? (
-          <div
-            onClick={() => setAddBlocks(false)}
-            className={"absolute inset-0 z-50 flex items-center bg-black/30 backdrop-blur-sm"}>
-            <div
-              onClick={(e) => e.stopPropagation()}
-              className="mx-auto h-[90%] w-[90%] max-w-3xl rounded-md bg-white p-4 shadow-lg shadow-black/10 xl:w-[65%]">
-              <AddBlocksPanel />
-            </div>
-          </div>
+        {codeEditor ? (
+          <Suspense fallback={<Skeleton className="h-full" />}>
+            <Resizable enable={{ top: true, bottom: false }} className="max-h-[400px] min-h-[200px]">
+              <CodeEditor />
+            </Resizable>
+          </Suspense>
         ) : null}
+        <Breadcrumb />
       </div>
     </div>
   );

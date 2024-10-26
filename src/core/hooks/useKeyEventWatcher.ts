@@ -1,36 +1,49 @@
 import { useHotkeys } from "react-hotkeys-hook";
 import { useSelectedBlockIds } from "./useSelectedBlockIds";
-import { useCopyBlockIds } from "./useCopyBlockIds";
 import { useRemoveBlocks } from "./useRemoveBlocks";
 import { useDuplicateBlocks } from "./useDuplicateBlocks";
-import { useCutBlockIds } from "./useCutBlockIds";
-import { usePasteBlocks } from "./usePasteBlocks";
-import { useCanvasHistory } from "./useCanvasHistory";
+import { useUndoManager } from "../history/useUndoManager.ts";
+import { useCutBlockIds } from "./useCutBlockIds.ts";
+import { useCopyBlockIds } from "./useCopyBlockIds.ts";
+import { usePasteBlocks } from "./usePasteBlocks.ts";
 
-export const useKeyEventWatcher = () => {
+export const useKeyEventWatcher = (doc?: Document) => {
   const [ids, setIds] = useSelectedBlockIds();
-  const [, setCopyIds] = useCopyBlockIds();
   const removeBlocks = useRemoveBlocks();
   const duplicateBlocks = useDuplicateBlocks();
-  const [, setCutIds] = useCutBlockIds();
-  const { pasteBlocks } = usePasteBlocks();
-  const { undo, redo } = useCanvasHistory();
+  const { undo, redo } = useUndoManager();
+  const [, setCutBlockIds] = useCutBlockIds();
+  const [, setCopyBlockIds] = useCopyBlockIds();
+  const { canPaste, pasteBlocks } = usePasteBlocks();
 
-  useHotkeys("esc", () => setIds([]), {}, [setIds]);
-  useHotkeys("ctrl+c,command+c", () => setCopyIds(ids), {}, [ids, setCopyIds]);
-  useHotkeys("ctrl+d,command+d", () => duplicateBlocks(ids), { preventDefault: true }, [ids, duplicateBlocks]);
-  useHotkeys("ctrl+x,command+x", () => setCutIds(ids), {}, [ids, setCutIds]);
-  useHotkeys("ctrl+v,command+v", () => (ids.length === 1 ? pasteBlocks(ids[0]) : null), {}, [ids, pasteBlocks]);
   useHotkeys("ctrl+z,command+z", () => undo(), {}, [undo]);
   useHotkeys("ctrl+y,command+y", () => redo(), {}, [redo]);
+  useHotkeys("ctrl+x,command+x", () => setCutBlockIds(ids), {}, [ids, setCutBlockIds]);
+  useHotkeys("ctrl+c,command+c", () => setCopyBlockIds(ids), {}, [ids, setCopyBlockIds]);
+  useHotkeys(
+    "ctrl+v,command+v",
+    () => {
+      if (canPaste(ids[0])) {
+        pasteBlocks(ids);
+      }
+    },
+    {},
+    [ids, canPaste, pasteBlocks],
+  );
 
+  const options = doc ? { document: doc } : {};
+  useHotkeys("esc", () => setIds([]), options, [setIds]);
+  useHotkeys("ctrl+d,command+d", () => duplicateBlocks(ids), { ...options, preventDefault: true }, [
+    ids,
+    duplicateBlocks,
+  ]);
   useHotkeys(
     "del, backspace",
     (event: any) => {
       event.preventDefault();
       removeBlocks(ids);
     },
-    {},
+    options,
     [ids, removeBlocks],
   );
 };

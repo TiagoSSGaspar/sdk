@@ -20,22 +20,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../ui";
-import React, { useEffect, useMemo, useState } from "react";
-import { filter, find, isEmpty, isNull, map } from "lodash";
+import { useEffect, useMemo, useState } from "react";
+import { filter, find, isEmpty, isNull, map, noop } from "lodash-es";
+import { useTranslation } from "react-i18next";
 import { usePageDataProviders } from "../../hooks/usePageDataProviders.ts";
 import { useAtom } from "jotai";
-import { pageSyncStateAtom } from "../../hooks/useSavePage.ts";
-import { ErrorBoundary } from "../ErrorBoundary.tsx";
-
-const LazyViewer = React.lazy(() => import("react-json-view"));
+import { builderSaveStateAtom } from "../../hooks/useSavePage.ts";
+import { allExpanded, defaultStyles, JsonView } from "react-json-view-lite";
+import { ErrorBoundary } from "react-error-boundary";
+import "react-json-view-lite/dist/index.css";
+import { FallbackError } from "../FallbackError.tsx";
+import { useBuilderProp } from "../../hooks";
 
 const ViewProviderData = ({ provider, onClose }) => {
+  const { t } = useTranslation();
   const [json, setJson] = useState(null);
+  const onErrorFn = useBuilderProp("onError", noop);
 
   useEffect(() => {
     if (provider) {
       const fn = provider.mockFn ? provider.mockFn : provider.dataFn;
-      fn().then((data) => setJson(data));
+      fn().then((data: any) => setJson(data));
     }
   }, [provider]);
 
@@ -43,19 +48,23 @@ const ViewProviderData = ({ provider, onClose }) => {
 
   return (
     <Dialog onOpenChange={(open) => (!open ? onClose() : "")} defaultOpen={true}>
-      <DialogContent>
+      <DialogContent className={"border-border"}>
         <DialogHeader>
-          <DialogTitle>Data Provider: {provider.name}</DialogTitle>
+          <DialogTitle className={"text-foreground"}>
+            {t("data_provider")}: {provider.name}
+          </DialogTitle>
           <DialogDescription>{provider.description}</DialogDescription>
         </DialogHeader>
-        <ErrorBoundary>
-          <LazyViewer
-            style={{ maxHeight: "80vh", overflowY: "auto" }}
-            name={provider.providerKey}
-            enableClipboard={false}
-            displayObjectSize={false}
-            displayDataTypes={false}
-            src={json}
+        <ErrorBoundary fallback={<FallbackError />} onError={onErrorFn}>
+          <JsonView
+            data={json}
+            shouldExpandNode={allExpanded}
+            style={{
+              ...defaultStyles,
+              container: "max-h-[80vh] overflow-y-auto text-[12px] leading-[1.5] tracking-wide font-mono",
+              stringValue: "text-orange-600",
+              label: "text-green-900 font-semibold pr-1 tracking-wider",
+            }}
           />
         </ErrorBoundary>
       </DialogContent>
@@ -72,22 +81,21 @@ function RemoveProviderConfirmation({
   name: string;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>{children}</AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>
-            Are you sure, you want to remove <span className="text-blue-500">{name}</span> provider?
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            Your data provider will be removed from this page and all added data binding will be not visible on blocks.
-          </AlertDialogDescription>
+          <AlertDialogTitle
+            dangerouslySetInnerHTML={{ __html: t("remove_provider_confirmation").replace(`{name}`, name) }}
+          />
+          <AlertDialogDescription>{t("remove_provider_warning")}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
           <AlertDialogAction onClick={onRemove} className="bg-red-600 hover:bg-red-700">
-            Remove
+            {t("remove")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -96,9 +104,10 @@ function RemoveProviderConfirmation({
 }
 
 export const PageDataProviders = () => {
+  const { t } = useTranslation();
   const providersList = useMemo(() => getChaiDataProviders(), []);
   const [dataProviders, setChaiProviders] = usePageDataProviders();
-  const [, setSyncState] = useAtom(pageSyncStateAtom);
+  const [, setSaveState] = useAtom(builderSaveStateAtom);
 
   const [providers, setProviders] = useState(
     filter(providersList, (p) => map(dataProviders, "providerKey").includes(p.providerKey)),
@@ -121,13 +130,13 @@ export const PageDataProviders = () => {
     setProviders((prev) => [...prev, dataProvider]);
     setChaiProviders((prev) => [...prev, { providerKey: dataProvider.providerKey, args: {} }]);
     setProvider("");
-    setSyncState("UNSAVED");
+    setSaveState("UNSAVED");
   };
 
   const removeProvider = (provider) => {
     setProviders((prev) => filter(prev, (p) => p.providerKey !== provider.providerKey));
     setChaiProviders((prev) => filter(prev, (p) => p.providerKey !== provider.providerKey));
-    setSyncState("UNSAVED");
+    setSaveState("UNSAVED");
   };
 
   const viewData = (p) => setViewer(p);
@@ -135,10 +144,11 @@ export const PageDataProviders = () => {
   if (isEmpty(providersList))
     return (
       <div>
-        <p className="text-gray-500 mb-1.5 text-xs p-4">
-          You have no data providers registered. Please add a data provider to your project. <br />
+        <p className="mb-1.5 p-4 text-xs text-gray-500">
+          {t("no_data_providers")}
+          <br />
           <a className="text-blue-500" href="https://chaibuilder.com/docs/registering-data-providers" target={"_blank"}>
-            Learn more
+            {t("learn_more")}
           </a>
         </p>
       </div>
@@ -148,15 +158,15 @@ export const PageDataProviders = () => {
     <div className="px-1">
       <br />
       <label>
-        <p className="text-gray-500 mb-1.5 text-xs">Add data providers:</p>
+        <p className="mb-1.5 text-xs text-gray-500">{t("add_data_providers")}</p>
       </label>
       <div className="flex items-center space-x-1">
         <Select value={provider} onValueChange={(value) => addProvider(value)}>
           <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select a provider" />
+            <SelectValue placeholder={t("select_provider")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Choose</SelectItem>
+            <SelectItem value="">{t("choose")}</SelectItem>
             {options.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
@@ -167,26 +177,26 @@ export const PageDataProviders = () => {
       </div>
       <br />
 
-      <div className={`border-t ${providers.length ? "block" : "hidden"}`}>
-        <p className="text-gray-500 pt-4 pb-1.5 text-xs flex-1 font-medium">Page data providers:</p>
+      <div className={`border-t border-border ${providers.length ? "block" : "hidden"}`}>
+        <p className="flex-1 pb-1.5 pt-4 text-xs font-medium text-gray-500">{t("page_data_providers")}:</p>
         <div className="space-y-2">
           {providers.map((dataProvider) => (
             <div
               key={dataProvider.providerKey}
-              className="rounded-lg border bg-card text-card-foreground shadow-sm w-full"
+              className="w-full rounded-lg border border-border bg-card text-card-foreground shadow-sm"
               data-v0-t="card">
               <div className="flex flex-col space-y-1.5 px-4 pt-4">
-                <div className="flex justify-between items-center">
+                <div className="flex items-center justify-between">
                   <div>
                     <h3 className="font-medium leading-4">{dataProvider.name}</h3>
-                    <p className="text-xs text-gray-400 pt-1">{dataProvider.description}</p>
+                    <p className="pt-1 text-xs text-gray-400">{dataProvider.description}</p>
                   </div>
                 </div>
               </div>
-              <div className="items-center p-2 py-2 flex justify-between">
+              <div className="flex items-center justify-between p-2 py-2">
                 <button
                   onClick={() => viewData(dataProvider)}
-                  className="inline-flex items-center justify-center text-xs font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 underline-offset-4 hover:underline h-9 rounded-md px-3 text-blue-500">
+                  className="inline-flex h-9 items-center justify-center rounded-md px-3 text-xs font-medium text-blue-500 underline-offset-4 ring-offset-background transition-colors hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="24"
@@ -194,17 +204,17 @@ export const PageDataProviders = () => {
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    className="w-4 h-4 mr-2">
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="mr-2 h-4 w-4">
                     <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path>
                     <circle cx="12" cy="12" r="3"></circle>
                   </svg>
-                  View Data
+                  {t("view_data")}
                 </button>
                 <RemoveProviderConfirmation onRemove={() => removeProvider(dataProvider)} name={dataProvider.name}>
-                  <button className="inline-flex items-center justify-center text-xs font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 underline-offset-4 hover:underline h-9 rounded-md px-3 text-red-500">
+                  <button className="inline-flex h-9 items-center justify-center rounded-md px-3 text-xs font-medium text-red-500 underline-offset-4 ring-offset-background transition-colors hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50">
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       width="24"
@@ -212,15 +222,15 @@ export const PageDataProviders = () => {
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      className="w-4 h-4 mr-2">
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="mr-2 h-4 w-4">
                       <path d="M3 6h18"></path>
                       <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
                       <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
                     </svg>
-                    Remove
+                    {t("remove")}
                   </button>
                 </RemoveProviderConfirmation>
               </div>

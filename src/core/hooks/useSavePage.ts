@@ -1,39 +1,37 @@
 import { useThrottledCallback } from "@react-hookz/web";
-import { atom, useAtom, useSetAtom } from "jotai";
+import { atom, useAtom } from "jotai";
 import { useGetPageData } from "./useGetPageData";
 import { useBuilderProp } from "./useBuilderProp";
-import { historyStatesAtom } from "../atoms/ui";
-import { useCanvasHistory } from "./useCanvasHistory";
 import { usePageDataProviders } from "./usePageDataProviders.ts";
+import { useBrandingOptions } from "./useBrandingOptions.ts";
+import { noop } from "lodash-es";
 
-export const pageSyncStateAtom = atom<"SAVED" | "UNSAVED" | "SAVING">("SAVED"); // SAVING
-pageSyncStateAtom.debugLabel = "pageSyncStateAtom";
+export const builderSaveStateAtom = atom<"SAVED" | "UNSAVED" | "SAVING">("SAVED"); // SAVING
+builderSaveStateAtom.debugLabel = "builderSaveStateAtom";
 
 export const useSavePage = () => {
-  const [syncState, setSyncState] = useAtom(pageSyncStateAtom);
-  const onSaveBlocks = useBuilderProp("onSaveBlocks", async () => {});
-  const onSavePage = useBuilderProp("onSavePage", async () => {});
-  const onSyncStatusChange = useBuilderProp("onSyncStatusChange", () => {});
+  const [saveState, setSaveState] = useAtom(builderSaveStateAtom);
+  const onSave = useBuilderProp("onSave", async (_args) => {});
+  const onSaveStateChange = useBuilderProp("onSaveStateChange", noop);
   const getPageData = useGetPageData();
-  const setNewState = useSetAtom(historyStatesAtom);
-  const { undoCount, redoCount } = useCanvasHistory();
   const [providers] = usePageDataProviders();
+  const [brandingOptions] = useBrandingOptions();
+
   const savePage = useThrottledCallback(
     async () => {
-      setSyncState("SAVING");
-      onSyncStatusChange("SAVING");
+      setSaveState("SAVING");
+      onSaveStateChange("SAVING");
       const pageData = getPageData();
-      await onSavePage({ blocks: pageData.blocks, providers });
+      await onSave({ blocks: pageData.blocks, providers, brandingOptions, themeConfiguration: brandingOptions });
       setTimeout(() => {
-        setNewState({ undoCount, redoCount });
-        setSyncState("SAVED");
-        onSyncStatusChange("SAVED");
+        setSaveState("SAVED");
+        onSaveStateChange("SAVED");
       }, 100);
       return true;
     },
-    [getPageData, setSyncState, onSyncStatusChange, onSaveBlocks],
-    5000, // save only every 5 seconds
+    [getPageData, setSaveState, brandingOptions, onSave, onSaveStateChange],
+    3000, // save only every 5 seconds
   );
 
-  return { savePage, syncState, setSyncState };
+  return { savePage, saveState, setSaveState };
 };

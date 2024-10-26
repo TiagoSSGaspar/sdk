@@ -1,37 +1,18 @@
-import { get, includes, last, replace, set, startsWith } from "lodash";
-import { createTailwindcss } from "@mhsdesign/jit-browser-tailwindcss";
-import { tailwindcssPaletteGenerator } from "@bobthered/tailwindcss-palette-generator";
-import defaultTheme from "tailwindcss/defaultTheme";
-import twForms from "@tailwindcss/forms";
-import twTypography from "@tailwindcss/typography";
-import twAspectRatio from "@tailwindcss/aspect-ratio";
-import twLineClamp from "@tailwindcss/line-clamp";
+import { flattenDeep, last } from "lodash-es";
 import { ChaiBlock } from "../core/types/ChaiBlock.ts";
-import { STYLES_KEY } from "../core/constants/CONTROLS.ts";
+import { STYLES_KEY } from "../core/constants/STRINGS.ts";
 
-type BrandingOptions = {
-  bodyTextLightColor?: string;
-  bodyTextDarkColor?: string;
-  bodyBgLightColor?: string;
-  bodyBgDarkColor?: string;
-};
-
-export const getBrandingClasses = (brandingOptions: BrandingOptions, prefix: string = "c-") => {
-  const textLight = get(brandingOptions, "bodyTextLightColor", "#64748b");
-  const textDark = get(brandingOptions, "bodyTextDarkColor", "#94a3b8");
-  const bgLight = get(brandingOptions, "bodyBgLightColor", "#FFFFFF");
-  const bgDark = get(brandingOptions, "bodyBgDarkColor", "#0f172a");
-  // @ts-ignore
-  return `${prefix}font-body ${prefix}antialiased ${prefix}text-[${textLight}] ${prefix}bg-[${bgLight}] dark:${prefix}text-[${textDark}] dark:${prefix}bg-[${bgDark}]`;
-};
-
-export const addPrefixToClasses = (classes: string, prefix: string = "c-") => {
+/**
+ * This function adds the prefix to the classes
+ * @param classes
+ * @param prefix
+ */
+export const addPrefixToClasses = (classes: string, prefix: string = "") => {
   const classesArray = classes.replace(STYLES_KEY, "").split(",");
   const array = classesArray.map((item) => {
     const classes = item.split(" ");
     const newClasses = classes.map((item) => {
       if (item === "") return "";
-      if (includes(item, "hs-") || includes(item, "[--") || includes(item, "paddle")) return item;
       // if the class had a state of media query, then prefix the classes
       // eg: dark:hover:bg-red-500 => dark:hover:c-bg-red-500
       // eg: hover:bg-red-500 => hover:c-bg-red-500
@@ -45,120 +26,46 @@ export const addPrefixToClasses = (classes: string, prefix: string = "c-") => {
     });
     return newClasses.join(" ");
   });
-  return `${STYLES_KEY}${array.join(" , ")}`;
+  return flattenDeep(array).join(" ");
 };
-
-const addPrefixToBlockStyles = (blocks: ChaiBlock[], prefix: string) => {
-  return blocks.map((block: any) => {
-    // loop through all block keys and check if it starts with #styles:
-    // if it does, then replace "#styles:" with the empty string
-    const blocksStyles = {};
-    Object.keys(block).forEach((key) => {
-      if (startsWith(block[key], STYLES_KEY)) {
-        blocksStyles[key] = addPrefixToClasses(block[key], prefix);
-      }
-    });
-    return blocksStyles;
-  });
-};
-
-export const getBlocksTailwindCSS = (blocks: ChaiBlock[], brandingOptions: any, prefix: string = "c-") => {
-  const brandingClasses = getBrandingClasses(brandingOptions, prefix);
-  return getTailwindCSS(
-    brandingOptions,
-    [replace(JSON.stringify(addPrefixToBlockStyles(blocks, prefix)), /#styles:/g, "")],
-    brandingClasses.split(" ").concat(`${prefix}inline-block`, `${prefix}w-full`, `${prefix}h-full`),
-  );
-};
-
-export type ChaiPageData = {
-  page: {
-    blocks: ChaiBlock[];
-    seoData?: Record<string, string>;
-    slug?: string;
-    name?: string;
-    providers?: { providerKey: string; args: Record<string, any> }[];
-  };
-  subPages?: {
-    uuid: string;
-    blocks: ChaiBlock[];
-    providers: { providerKey: string; args: Record<string, any> }[];
-  }[];
-  project: {
-    name?: string;
-    favicon?: string;
-    brandingOptions: Record<string, string | number>;
-    seoData?: Record<string, string>;
-    primaryLanguage?: string;
-    languages?: string[];
-    homepage?: string;
-  };
-};
-
-export const getStylesForPageData = async (pageData: ChaiPageData, classPrefix: string = "c-"): Promise<string> => {
-  //TODO: add support for subpages
-  const blocks = pageData.page.blocks;
-  return await getBlocksTailwindCSS(blocks, pageData.project.brandingOptions, classPrefix);
-};
-
-export const getStylesForBlocks = async (
-  blocks: ChaiBlock[],
-  brandingOptions: BrandingOptions,
-  classPrefix: string = "c-",
-): Promise<string> => {
-  return await getBlocksTailwindCSS(blocks, brandingOptions, classPrefix);
-};
-
-async function getTailwindCSS(options: any, markupString: string[], safelist: string[] = [], prefix: string = "c-") {
-  const primary = get(options, "primaryColor", "#000");
-  const secondary = get(options, "secondaryColor", "#ccc");
-
-  const headingFont = get(options, "headingFont", "Inter");
-  const bodyFont = get(options, "bodyFont", "Inter");
-  const borderRadius = get(options, "roundedCorners", "0");
-  const colors = tailwindcssPaletteGenerator({
-    colors: [primary, secondary],
-    names: ["primary", "secondary"],
-  });
-  set(colors, "primary.DEFAULT", primary);
-  set(colors, "secondary.DEFAULT", secondary);
-  const tailwind = createTailwindcss({
-    tailwindConfig: {
-      prefix,
-      darkMode: "class",
-      safelist,
-      theme: {
-        fontFamily: {
-          heading: [headingFont, ...defaultTheme.fontFamily.sans],
-          body: [bodyFont, ...defaultTheme.fontFamily.sans],
-        },
-        extend: {
-          borderRadius: {
-            global: `${!borderRadius ? "0" : borderRadius}px`,
-          },
-          colors,
-        },
-      },
-      plugins: [twForms, twTypography, twAspectRatio, twLineClamp],
-      corePlugins: { preflight: false },
-    },
-  });
-
-  const css = await tailwind.generateStylesFromContent(
-    ` @tailwind components;
-      @tailwind utilities;`,
-    markupString,
-  );
-  return `${css} .${prefix}bg-clip-text{background-clip: text;-webkit-background-clip: text;} h1,h2,h3,h4,h5,h6{font-family: "${headingFont}",${defaultTheme.fontFamily.sans.join(
-    ", ",
-  )};}`;
-}
 
 /**
- * Get the unique uuid
+ * This function converts the chai format content to chai blocks
+ * @param chaiFormatContent
  */
-export function generateUUID(length: number = 6, chars = "abcdefghijklmnopqrstuvwxyzABCD"): string {
-  let result = "";
-  for (let i = length; i > 0; --i) result += chars[Math.floor(Math.random() * chars.length)];
-  return result;
+export const convertToBlocks = (chaiFormatContent: string): ChaiBlock[] => {
+  if (!chaiFormatContent) return [];
+  try {
+    const blocks = JSON.parse(removeAssetPrefix(chaiFormatContent));
+    //remove the blocks whose _type starts with @chai
+    return blocks.filter((block) => !block._type.startsWith("@chai"));
+  } catch (error) {
+    return [{ _type: "Paragraph", _id: "error", content: "Invalid JSON. Please check the JSON string." }];
+  }
+};
+
+/**
+ * This function removes the "asset://" prefix from asset URLs in the input string.
+ * This is important for chai files generated by Chai Studio.
+ * This is how urls are generated in Tauri apps Before rendering to HTML need to convert them into
+ * relative paths
+ * @param input
+ */
+function removeAssetPrefix(input: string): string {
+  // Step 1: Find the asset URL
+  const regex = /(asset:\/\/|https:\/\/asset\.localhost\/)(?:localhost\/)?[^"']+/g;
+
+  return input.replace(regex, (match) => {
+    // Step 2: Decode the entire URL
+    const decodedUrl = decodeURIComponent(match);
+
+    // Step 3: Remove the part up to and including "public"
+    const publicIndex = decodedUrl.indexOf("public");
+    if (publicIndex !== -1) {
+      return decodedUrl.substring(publicIndex + 6); // +6 to remove "public"
+    }
+
+    // If "public" is not found, return the entire decoded URL
+    return decodedUrl;
+  });
 }

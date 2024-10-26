@@ -1,35 +1,34 @@
-import React from "react";
+import React, { lazy } from "react";
 import ReactDOM from "react-dom/client";
-import "./index.css";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
-import ChaiStudio from "./ChaiStudio";
-import Preview from "./Preview";
-import ChaiEditor from "./Editor";
-import "./blocks";
-import "./RowCol.tsx";
-import "./data-providers/data";
-import RJSF from "./RJSF.tsx";
+import "./index.css";
+import ChaiBuilderCustom from "./EditorCustom.tsx";
+import { DevTools } from "jotai-devtools";
 
 async function enableMocking() {
   if (import.meta.env.MODE !== "development") {
     return;
   }
 
-  const { worker } = await import("./mock/browser");
+  // const { worker } = await import("./__dev/mock/browser");
 
   // `worker.start()` returns a Promise that resolves
   // once the Service Worker is up and ready to intercept requests.
-  return worker.start();
+  return true;
 }
+
+const ChaiBuilderDefault = lazy(() => import("./Editor.tsx"));
+const Preview = lazy(() => import("./Preview.tsx"));
+const RJSF = lazy(() => import("./RJSF.tsx"));
 
 const router = createBrowserRouter([
   {
     path: "/",
-    element: <ChaiEditor />,
+    element: <ChaiBuilderDefault />,
   },
   {
-    path: "/studio",
-    element: <ChaiStudio />,
+    path: "/custom",
+    element: <ChaiBuilderCustom />,
   },
   {
     path: "/preview",
@@ -44,6 +43,7 @@ const router = createBrowserRouter([
 enableMocking().then(() => {
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
+      <DevTools />
       <RouterProvider router={router} />
     </React.StrictMode>,
   );

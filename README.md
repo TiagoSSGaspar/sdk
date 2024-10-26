@@ -1,14 +1,16 @@
-# Chai Builder - Low-Code Visual Builder
+# Chai Builder - Open Source Tailwind Builder
 
-Chai Builder is an Open Source Low Code React + Tailwind CSS Visual Builder. Its a simple React component which can be integrated into any React based framework.
+Chai Builder is an Open Source Low Code React + Tailwind CSS Visual Builder. 
+It allows you to create web pages visually by dragging and dropping elements onto the canvas. 
+It is a simple React component that renders a full-fledged visual builder into any React application. 
 
-### Try Chai Builder:
-[Demo Link](https://chaibuilder-demo.vercel.app)
-&nbsp;&nbsp; |  &nbsp;&nbsp;  [GitHub](https://github.com/surajair/demo)
+#### [View Demo](https://chaibuilder.com/demos/web)
+#### [Documentation](https://chaibuilder.com/docs/sdk/introduction)
+#### [API References](https://api-reference.chaibuilder.com)
 
 ---
 
-### Getting Started:
+### Manual installation:
 
 Step 1: Install the packages
 ```bash
@@ -18,8 +20,8 @@ npm install @chaibuilder/sdk @chaibuilder/runtime tailwindcss
 Step 2: Add a custom tailwind config.
 Create a new file: `tailwind.chaibuilder.config.ts`. <br /> Pass the path to your source files.
 ```tsx
-import { chaiBuilderTailwindConfig } from "@chaibuilder/sdk/tailwind";
-export default chaiBuilderTailwindConfig(["./src/**/*.{js,ts,jsx,tsx}"]);
+import { getChaiBuilderTailwindConfig } from "@chaibuilder/sdk/tailwind";
+export default getChaiBuilderTailwindConfig(["./src/**/*.{js,ts,jsx,tsx}"]);
 
 ```
 
@@ -36,30 +38,33 @@ Step 4: Add the builder to your page.
 ```tsx
 import "./chaibuilder.tailwind.css";
 import "@chaibuilder/sdk/styles";
-import {ChaiBuilderEditor} from "@chaibuilder/sdk";
+import {loadWebBlocks} from "@chaibuilder/sdk/web-blocks";
+import { ChaiBuilderEditor } from "@chaibuilder/sdk";
+
+loadWebBlocks();
 
 const BuilderFullPage = () => {
   return  (
       <ChaiBuilderEditor
-          blocks={[]}
-          onSavePage={async (blocks) => await saveBlocks(blocks)}
-          onSaveBrandingOptions={async (branding) => await saveBranding(branding)}
+          blocks={[{_type: 'Heading', _id: 'a', content: 'This is a heading', styles: '#styles:,text-3xl font-bold'}]}
+          onSave={async ({ blocks, providers, brandingOptions } ) => {
+            console.log(blocks, providers, brandingOptions );
+            return true
+          }}
       />
   );
 }
 ```
     
-Step 5: Render the blocks on your page.
+### Render the blocks on your page.
+
 ```tsx
-export default async () => {
-    const styles = await getStylesForBlocks(blocks, brandingOptions);
-    return <>
-        <style>{styles}</style>
-        <RenderChaiBlocks blocks={blocks} />
-    </>
+export default () => {
+    return <RenderChaiBlocks blocks={blocks}/>
 }
 ```
 
+---
 ## Support
 If you like the project, you can assist us in expanding. ChaiBuilder is a collaborative endeavor crafted by developers in their free time. We value every contribution, no matter how modest, as each one represents a significant step forward in various ways, particularly in fueling our drive to enhance this tool continually.
 
